@@ -31,6 +31,7 @@ if [ "x${BUILD_TYPE}" == "x" ] && [ "x${FROM_SOURCE}" == "xtrue" ]; then
             uv pip install --upgrade pip
             uv pip install -v -r requirements/cpu-build.txt --extra-index-url https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match
             uv pip install -v -r requirements/cpu.txt --extra-index-url https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match
+            uv pip install numpy typing-extensions pillow grpcio==1.71.0 protobuf protobuf certifi accelerate transformers bitsandbytes
             VLLM_TARGET_DEVICE=cpu python setup.py install
         popd
         rm -rf vllm

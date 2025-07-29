@@ -20,7 +20,7 @@ import torch
 import torch.cuda
 
 
-XPU=os.environ.get("XPU", "0") == "1"
+XPU = ((os.environ.get("XPU", "0") == "1") & (torch.xpu.is_available()))
 from transformers import AutoTokenizer, AutoModel, set_seed, TextIteratorStreamer, StoppingCriteriaList, StopStringCriteria, MambaConfig, MambaForCausalLM
 from transformers import AutoProcessor, MusicgenForConditionalGeneration
 from scipy.io import wavfile
