@@ -1,4 +1,32 @@
 ---
+- &afm
+  name: "arcee-ai_afm-4.5b"
+  url: "github:mudler/LocalAI/gallery/chatml.yaml@master"
+  icon: https://cdn-uploads.huggingface.co/production/uploads/6435718aaaef013d1aec3b8b/Lj9YVLIKKdImV_jID0A1g.png
+  license: aml
+  urls:
+    - https://huggingface.co/arcee-ai/AFM-4.5B
+    - https://huggingface.co/bartowski/arcee-ai_AFM-4.5B-GGUF
+  tags:
+    - gguf
+    - gpu
+    - gpu
+    - text-generation
+  description: |
+    AFM-4.5B is a 4.5 billion parameter instruction-tuned model developed by Arcee.ai, designed for enterprise-grade performance across diverse deployment environments from cloud to edge. The base model was trained on a dataset of 8 trillion tokens, comprising 6.5 trillion tokens of general pretraining data followed by 1.5 trillion tokens of midtraining data with enhanced focus on mathematical reasoning and code generation. Following pretraining, the model underwent supervised fine-tuning on high-quality instruction datasets. The instruction-tuned model was further refined through reinforcement learning on verifiable rewards as well as for human preference. We use a modified version of TorchTitan for pretraining, Axolotl for supervised fine-tuning, and a modified version of Verifiers for reinforcement learning.
+
+    The development of AFM-4.5B prioritized data quality as a fundamental requirement for achieving robust model performance. We collaborated with DatologyAI, a company specializing in large-scale data curation. DatologyAI's curation pipeline integrates a suite of proprietary algorithms—model-based quality filtering, embedding-based curation, target distribution-matching, source mixing, and synthetic data. Their expertise enabled the creation of a curated dataset tailored to support strong real-world performance.
+
+    The model architecture follows a standard transformer decoder-only design based on Vaswani et al., incorporating several key modifications for enhanced performance and efficiency. Notable architectural features include grouped query attention for improved inference efficiency and ReLU^2 activation functions instead of SwiGLU to enable sparsification while maintaining or exceeding performance benchmarks.
+
+    The model available in this repo is the instruct model following supervised fine-tuning and reinforcement learning.
+  overrides:
+    parameters:
+      model: arcee-ai_AFM-4.5B-Q4_K_M.gguf
+  files:
+    - filename: arcee-ai_AFM-4.5B-Q4_K_M.gguf
+      sha256: f05516b323f581bebae1af2cbf900d83a2569b0a60c54366daf4a9c15ae30d4f
+      uri: huggingface://bartowski/arcee-ai_AFM-4.5B-GGUF/arcee-ai_AFM-4.5B-Q4_K_M.gguf
 - &rfdetr
   name: "rfdetr-base"
   url: "github:mudler/LocalAI/gallery/virtual.yaml@master"
@@ -1878,6 +1906,43 @@
     - filename: Menlo_Lucy-128k-Q4_K_M.gguf
       sha256: fb3e591cccc5d2821f3c615fd6dc2ca86d409f56fbc124275510a9612a90e61f
       uri: huggingface://bartowski/Menlo_Lucy-128k-GGUF/Menlo_Lucy-128k-Q4_K_M.gguf
+- !!merge <<: *qwen3
+  name: "qwen_qwen3-30b-a3b-instruct-2507"
+  urls:
+    - https://huggingface.co/Qwen/Qwen3-30B-A3B-Instruct-2507
+    - https://huggingface.co/bartowski/Qwen_Qwen3-30B-A3B-Instruct-2507-GGUF
+  description: |
+    We introduce the updated version of the Qwen3-30B-A3B non-thinking mode, named Qwen3-30B-A3B-Instruct-2507, featuring the following key enhancements:
+
+        Significant improvements in general capabilities, including instruction following, logical reasoning, text comprehension, mathematics, science, coding and tool usage.
+        Substantial gains in long-tail knowledge coverage across multiple languages.
+        Markedly better alignment with user preferences in subjective and open-ended tasks, enabling more helpful responses and higher-quality text generation.
+        Enhanced capabilities in 256K long-context understanding.
+  overrides:
+    parameters:
+      model: Qwen_Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf
+  files:
+    - filename: Qwen_Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf
+      sha256: 382b4f5a164d200f93790ee0e339fae12852896d23485cfb203ce868fea33a95
+      uri: huggingface://bartowski/Qwen_Qwen3-30B-A3B-Instruct-2507-GGUF/Qwen_Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf
+- !!merge <<: *qwen3
+  name: "qwen_qwen3-30b-a3b-thinking-2507"
+  urls:
+    - https://huggingface.co/Qwen/Qwen3-30B-A3B-Thinking-2507
+    - https://huggingface.co/bartowski/Qwen_Qwen3-30B-A3B-Thinking-2507-GGUF
+  description: |
+    Over the past three months, we have continued to scale the thinking capability of Qwen3-30B-A3B, improving both the quality and depth of reasoning. We are pleased to introduce Qwen3-30B-A3B-Thinking-2507, featuring the following key enhancements:
+    Significantly improved performance on reasoning tasks, including logical reasoning, mathematics, science, coding, and academic benchmarks that typically require human expertise.
+    Markedly better general capabilities, such as instruction following, tool usage, text generation, and alignment with human preferences.
+    Enhanced 256K long-context understanding capabilities.
+    NOTE: This version has an increased thinking length. We strongly recommend its use in highly complex reasoning tasks.
+  overrides:
+    parameters:
+      model: Qwen_Qwen3-30B-A3B-Thinking-2507-Q4_K_M.gguf
+  files:
+    - filename: Qwen_Qwen3-30B-A3B-Thinking-2507-Q4_K_M.gguf
+      sha256: 1359aa08e2f2dfe7ce4b5ff88c4c996e6494c9d916b1ebacd214bb74bbd5a9db
+      uri: huggingface://bartowski/Qwen_Qwen3-30B-A3B-Thinking-2507-GGUF/Qwen_Qwen3-30B-A3B-Thinking-2507-Q4_K_M.gguf
 - &gemma3
   url: "github:mudler/LocalAI/gallery/gemma.yaml@master"
   name: "gemma-3-27b-it"
@@ -19079,6 +19144,148 @@
   overrides:
     parameters:
       model: SicariusSicariiStuff/flux.1dev-abliteratedv2
+- name: flux.1-kontext-dev
+  license: flux-1-dev-non-commercial-license
+  url: "github:mudler/LocalAI/gallery/flux-ggml.yaml@master"
+  icon: https://huggingface.co/black-forest-labs/FLUX.1-Kontext-dev/media/main/teaser.png
+  description: |
+      FLUX.1 Kontext [dev] is a 12 billion parameter rectified flow transformer capable of editing images based on text instructions. For more information, please read our blog post and our technical report. You can find information about the [pro] version in here.
+      Key Features
+          Change existing images based on an edit instruction.
+          Have character, style and object reference without any finetuning.
+          Robust consistency allows users to refine an image through multiple successive edits with minimal visual drift.
+          Trained using guidance distillation, making FLUX.1 Kontext [dev] more efficient.
+          Open weights to drive new scientific research, and empower artists to develop innovative workflows.
+          Generated outputs can be used for personal, scientific, and commercial purposes, as described in the FLUX.1 [dev] Non-Commercial License.
+  urls:
+    - https://huggingface.co/black-forest-labs/FLUX.1-Kontext-dev
+    - https://huggingface.co/QuantStack/FLUX.1-Kontext-dev-GGUF
+  tags:
+    - image-to-image
+    - flux
+    - gpu
+    - cpu
+  overrides:
+    parameters:
+      model: flux1-kontext-dev-Q8_0.gguf
+  files:
+    - filename: "flux1-kontext-dev-Q8_0.gguf"
+      sha256: "ff2ff71c3755c8ab394398a412252c23382a83138b65190b16e736d457b80f73"
+      uri: "huggingface://QuantStack/FLUX.1-Kontext-dev-GGUF/flux1-kontext-dev-Q8_0.gguf"
+    - filename: ae.safetensors
+      sha256: afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38
+      uri: https://huggingface.co/ChuckMcSneed/FLUX.1-dev/resolve/main/ae.safetensors
+    - filename: clip_l.safetensors
+      sha256: 660c6f5b1abae9dc498ac2d21e1347d2abdb0cf6c0c0c8576cd796491d9a6cdd
+      uri: https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors
+    - filename: t5xxl_fp16.safetensors
+      sha256: 6e480b09fae049a72d2a8c5fbccb8d3e92febeb233bbe9dfe7256958a9167635
+      uri: https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors
+- !!merge <<: *flux
+  name: flux.1-dev-ggml-q8_0
+  license: flux-1-dev-non-commercial-license
+  url: "github:mudler/LocalAI/gallery/flux-ggml.yaml@master"
+  urls:
+    - https://huggingface.co/black-forest-labs/FLUX.1-dev
+    - https://huggingface.co/city96/FLUX.1-dev-gguf
+  overrides:
+    parameters:
+      model: flux1-dev-Q8_0.gguf
+  files:
+    - filename: "flux1-dev-Q8_0.gguf"
+      sha256: "129032f32224bf7138f16e18673d8008ba5f84c1ec74063bf4511a8bb4cf553d"
+      uri: "huggingface://city96/FLUX.1-dev-gguf/flux1-dev-Q8_0.gguf"
+    - filename: ae.safetensors
+      sha256: afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38
+      uri: https://huggingface.co/ChuckMcSneed/FLUX.1-dev/resolve/main/ae.safetensors
+    - filename: clip_l.safetensors
+      sha256: 660c6f5b1abae9dc498ac2d21e1347d2abdb0cf6c0c0c8576cd796491d9a6cdd
+      uri: https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors
+    - filename: t5xxl_fp16.safetensors
+      sha256: 6e480b09fae049a72d2a8c5fbccb8d3e92febeb233bbe9dfe7256958a9167635
+      uri: https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors
+- !!merge <<: *flux
+  name: flux.1-dev-ggml-abliterated-v2-q8_0
+  url: "github:mudler/LocalAI/gallery/flux-ggml.yaml@master"
+  description: |
+    FLUX.1 [dev] is an abliterated version of FLUX.1 [dev]
+  urls:
+    - https://huggingface.co/black-forest-labs/FLUX.1-dev
+    - https://huggingface.co/t8star/flux.1-dev-abliterated-V2-GGUF
+  overrides:
+    parameters:
+      model: T8-flux.1-dev-abliterated-V2-GGUF-Q8_0.gguf
+  files:
+    - filename: "T8-flux.1-dev-abliterated-V2-GGUF-Q8_0.gguf"
+      sha256: "aba8163ff644018da195212a1c33aeddbf802a0c2bba96abc584a2d0b6b42272"
+      uri: "huggingface://t8star/flux.1-dev-abliterated-V2-GGUF/T8-flux.1-dev-abliterated-V2-GGUF-Q8_0.gguf"
+    - filename: ae.safetensors
+      sha256: afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38
+      uri: https://huggingface.co/ChuckMcSneed/FLUX.1-dev/resolve/main/ae.safetensors
+    - filename: clip_l.safetensors
+      sha256: 660c6f5b1abae9dc498ac2d21e1347d2abdb0cf6c0c0c8576cd796491d9a6cdd
+      uri: https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors
+    - filename: t5xxl_fp16.safetensors
+      sha256: 6e480b09fae049a72d2a8c5fbccb8d3e92febeb233bbe9dfe7256958a9167635
+      uri: https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors
+- !!merge <<: *flux
+  name: flux.1-krea-dev-ggml
+  url: "github:mudler/LocalAI/gallery/flux-ggml.yaml@master"
+  description: |
+    FLUX.1 Krea [dev] is a 12 billion parameter rectified flow transformer capable of generating images from text descriptions. For more information, please read our blog post and Krea's blog post.
+    Cutting-edge output quality, with a focus on aesthetic photography.
+    Competitive prompt following, matching the performance of closed source alternatives.
+    Trained using guidance distillation, making FLUX.1 Krea [dev] more efficient.
+    Open weights to drive new scientific research, and empower artists to develop innovative workflows.
+    Generated outputs can be used for personal, scientific, and commercial purposes, as described in the flux-1-dev-non-commercial-license.
+  urls:
+    - https://huggingface.co/black-forest-labs/FLUX.1-Krea-dev
+    - https://huggingface.co/QuantStack/FLUX.1-Krea-dev-GGUF
+  overrides:
+    parameters:
+      model: flux1-krea-dev-Q4_K_M.gguf
+  files:
+    - filename: "flux1-krea-dev-Q4_K_M.gguf"
+      sha256: "cf199b88509be2b3476a3372ff03eaaa662cb2b5d3710abf939ebb4838dbdcaf"
+      uri: "huggingface://QuantStack/FLUX.1-Krea-dev-GGUF/flux1-krea-dev-Q4_K_M.gguf"
+    - filename: ae.safetensors
+      sha256: afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38
+      uri: https://huggingface.co/ChuckMcSneed/FLUX.1-dev/resolve/main/ae.safetensors
+    - filename: clip_l.safetensors
+      sha256: 660c6f5b1abae9dc498ac2d21e1347d2abdb0cf6c0c0c8576cd796491d9a6cdd
+      uri: https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors
+    - filename: t5xxl_fp16.safetensors
+      sha256: 6e480b09fae049a72d2a8c5fbccb8d3e92febeb233bbe9dfe7256958a9167635
+      uri: https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors
+- !!merge <<: *flux
+  name: flux.1-krea-dev-ggml-q8_0
+  url: "github:mudler/LocalAI/gallery/flux-ggml.yaml@master"
+  description: |
+    FLUX.1 Krea [dev] is a 12 billion parameter rectified flow transformer capable of generating images from text descriptions. For more information, please read our blog post and Krea's blog post.
+    Cutting-edge output quality, with a focus on aesthetic photography.
+    Competitive prompt following, matching the performance of closed source alternatives.
+    Trained using guidance distillation, making FLUX.1 Krea [dev] more efficient.
+    Open weights to drive new scientific research, and empower artists to develop innovative workflows.
+    Generated outputs can be used for personal, scientific, and commercial purposes, as described in the flux-1-dev-non-commercial-license.
+  urls:
+    - https://huggingface.co/black-forest-labs/FLUX.1-Krea-dev
+    - https://huggingface.co/markury/FLUX.1-Krea-dev-gguf
+  overrides:
+    parameters:
+      model: flux1-krea-dev-Q8_0.gguf
+  files:
+    - filename: "flux1-krea-dev-Q8_0.gguf"
+      sha256: "0d085b1e3ae0b90e5dbf74da049a80a565617de622a147d28ee37a07761fbd90"
+      uri: "huggingface://markury/FLUX.1-Krea-dev-gguf/flux1-krea-dev-Q8_0.gguf"
+    - filename: ae.safetensors
+      sha256: afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38
+      uri: https://huggingface.co/ChuckMcSneed/FLUX.1-dev/resolve/main/ae.safetensors
+    - filename: clip_l.safetensors
+      sha256: 660c6f5b1abae9dc498ac2d21e1347d2abdb0cf6c0c0c8576cd796491d9a6cdd
+      uri: https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors
+    - filename: t5xxl_fp16.safetensors
+      sha256: 6e480b09fae049a72d2a8c5fbccb8d3e92febeb233bbe9dfe7256958a9167635
+      uri: https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors
 - &whisper
   url: "github:mudler/LocalAI/gallery/whisper-base.yaml@master" ## Whisper
   name: "whisper-1"

@@ -1,5 +1,5 @@
 
-LLAMA_VERSION?=8ad7b3e65b5834e5574c2f5640056c9047b5d93b
+LLAMA_VERSION?=daf2dd788066b8b239cb7f68210e090c2124c199
 LLAMA_REPO?=https://github.com/ggerganov/llama.cpp
 
 CMAKE_ARGS?=
@@ -26,7 +26,7 @@ else ifeq ($(BUILD_TYPE),openblas)
 # If build type is clblas (openCL) we set -DGGML_CLBLAST=ON -DCLBlast_DIR=/some/path
 else ifeq ($(BUILD_TYPE),clblas)
 	CMAKE_ARGS+=-DGGML_CLBLAST=ON -DCLBlast_DIR=/some/path
-# If it's hipblas we do have also to set CC=/opt/rocm/llvm/bin/clang CXX=/opt/rocm/llvm/bin/clang++ 
+# If it's hipblas we do have also to set CC=/opt/rocm/llvm/bin/clang CXX=/opt/rocm/llvm/bin/clang++
 else ifeq ($(BUILD_TYPE),hipblas)
 	ROCM_HOME ?= /opt/rocm
 	ROCM_PATH ?= /opt/rocm
