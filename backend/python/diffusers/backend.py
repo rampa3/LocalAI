@@ -29,6 +29,7 @@ from safetensors.torch import load_file
 
 _ONE_DAY_IN_SECONDS = 60 * 60 * 24
 COMPEL = os.environ.get("COMPEL", "0") == "1"
+# Attempt to use XPU only if Torch says it is available when asking for it
 XPU = ((os.environ.get("XPU", "0") == "1") & (torch.xpu.is_available()))
 CLIPSKIP = os.environ.get("CLIPSKIP", "1") == "1"
 SAFETENSORS = os.environ.get("SAFETENSORS", "1") == "1"
@@ -36,6 +37,11 @@ CHUNK_SIZE = os.environ.get("CHUNK_SIZE", "8")
 FPS = os.environ.get("FPS", "7")
 DISABLE_CPU_OFFLOAD = os.environ.get("DISABLE_CPU_OFFLOAD", "0") == "1"
 FRAMES = os.environ.get("FRAMES", "64")
+
+# Set Torch to use all logical CPU cores for CPU mode
+num_cores = os.cpu_count()
+torch.set_num_threads(num_cores)
+torch.set_num_interop_threads(max(1, num_cores // 2))
 
 if XPU:
     print(torch.xpu.get_device_name(0))
