@@ -40,8 +40,8 @@ FRAMES = os.environ.get("FRAMES", "64")
 
 # Set Torch to use all logical CPU cores for CPU mode
 num_cores = os.cpu_count()
-torch.set_num_threads(num_cores)
-torch.set_num_interop_threads(max(1, num_cores // 2))
+torch.set_num_threads(max(1, num_cores // 2))
+torch.set_num_interop_threads(num_cores)
 
 if XPU:
     print(torch.xpu.get_device_name(0))
