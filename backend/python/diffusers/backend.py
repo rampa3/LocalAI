@@ -369,6 +369,8 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
                 self.pipe.to(device)
                 if self.controlnet:
                     self.controlnet.to(device)
+            else:
+                self.pipe.to("cpu")
 
         except Exception as err:
             return backend_pb2.Result(success=False, message=f"Unexpected {err=}, {type(err)=}")

@@ -19,7 +19,7 @@ import grpc
 import torch
 import torch.cuda
 
-
+# Attempt to use XPU only if Torch says it is available when asking for it
 XPU = ((os.environ.get("XPU", "0") == "1") & (torch.xpu.is_available()))
 from transformers import AutoTokenizer, AutoModel, set_seed, TextIteratorStreamer, StoppingCriteriaList, StopStringCriteria, MambaConfig, MambaForCausalLM
 from transformers import AutoProcessor, MusicgenForConditionalGeneration
