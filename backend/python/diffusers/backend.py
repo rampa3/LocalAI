@@ -159,7 +159,8 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
             torchType = torch.float32
             variant = None
 
-            if request.F16Memory:
+            # Only use f16 if not running on CPU - forcing f16 on CPU causes freezes (https://github.com/pytorch/pytorch/issues/75458)
+            if (request.F16Memory & (request.CUDA | XPU)):
                 torchType = torch.float16
                 variant = "fp16"
 
