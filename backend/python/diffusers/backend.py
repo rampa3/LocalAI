@@ -160,7 +160,7 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
             variant = None
 
             # Only use f16 if not running on CPU - forcing f16 on CPU causes freezes (https://github.com/pytorch/pytorch/issues/75458)
-            if (request.F16Memory & (request.CUDA | XPU)):
+            if (request.F16Memory & ((request.CUDA & torch.cuda.is_available()) | XPU)):
                 torchType = torch.float16
                 variant = "fp16"
 
@@ -268,6 +268,8 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
                         use_safetensors=True,
                         variant=variant)
             elif request.PipelineType == "FluxPipeline":
+                if not ((request.CUDA & torch.cuda.is_available()) | XPU):
+                        raise RuntimeError("Flux requires f16. Cannot run diffusers using f16 on CPU - doing so causes deadlocks. Refer to: https://github.com/pytorch/pytorch/issues/75458")
                 if fromSingleFile:
                     self.pipe = FluxPipeline.from_single_file(modelFile,
                                                               torch_dtype=torchType,
@@ -279,6 +281,8 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
                 if request.LowVRAM:
                     self.pipe.enable_model_cpu_offload()
             elif request.PipelineType == "FluxTransformer2DModel":
+                    if not ((request.CUDA & torch.cuda.is_available()) | XPU):
+                        raise RuntimeError("Flux requires f16. Cannot run diffusers using f16 on CPU - doing so causes deadlocks. Refer to: https://github.com/pytorch/pytorch/issues/75458")
                     dtype = torch.bfloat16
                     # specify from environment or default to "ChuckMcSneed/FLUX.1-dev"
                     bfl_repo = os.environ.get("BFL_REPO", "ChuckMcSneed/FLUX.1-dev")
@@ -297,12 +301,16 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
                     if request.LowVRAM:
                         self.pipe.enable_model_cpu_offload()
             elif request.PipelineType == "Lumina2Text2ImgPipeline":
+                if not ((request.CUDA & torch.cuda.is_available()) | XPU):
+                        raise RuntimeError("Lumina requires f16. Cannot run diffusers using f16 on CPU - doing so causes deadlocks. Refer to: https://github.com/pytorch/pytorch/issues/75458")
                 self.pipe = Lumina2Text2ImgPipeline.from_pretrained(
                     request.Model,
                     torch_dtype=torch.bfloat16)
                 if request.LowVRAM:
                     self.pipe.enable_model_cpu_offload()
             elif request.PipelineType == "SanaPipeline":
+                if not ((request.CUDA & torch.cuda.is_available()) | XPU):
+                        raise RuntimeError("Sana requires f16. Cannot run diffusers using f16 on CPU - doing so causes deadlocks. Refer to: https://github.com/pytorch/pytorch/issues/75458")
                 self.pipe = SanaPipeline.from_pretrained(
                     request.Model,
                     variant="bf16",
@@ -340,7 +348,7 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
                 # modify LoraAdapter to be relative to modelFileBase
                 request.LoraAdapter = os.path.join(request.ModelPath, request.LoraAdapter)
 
-            device = "cpu" if not request.CUDA else "cuda"
+            device = "cpu" if not (request.CUDA & torch.cuda.is_available()) else "cuda"
             if XPU:
                 device = "xpu"
             self.device = device
