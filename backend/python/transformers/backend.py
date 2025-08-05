@@ -84,7 +84,8 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
             model_name = request.ModelFile
 
         compute = torch.float16
-        if request.F16Memory == True:
+        # Only use f16 if not running on CPU - forcing f16 on CPU causes freezes (https://github.com/pytorch/pytorch/issues/75458)
+        if (request.F16Memory & ((request.CUDA & torch.cuda.is_available()) | XPU)) == True:
             compute=torch.bfloat16
 
         self.CUDA = torch.cuda.is_available()
@@ -97,8 +98,8 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
         quantization = None
         autoTokenizer = True
 
+        from transformers import BitsAndBytesConfig, AutoModelForCausalLM
         if self.CUDA:
-            from transformers import BitsAndBytesConfig, AutoModelForCausalLM
             if request.MainGPU:
                 device_map=request.MainGPU
             else:
