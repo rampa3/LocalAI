@@ -1,4 +1,4 @@
-diffusers
+git+https://github.com/huggingface/diffusers
 opencv-python
 transformers
 accelerate
@@ -6,5 +6,5 @@ compel
 peft
 sentencepiece
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.4.1+cpu
+torch==2.7.1+cpu
 optimum-quanto

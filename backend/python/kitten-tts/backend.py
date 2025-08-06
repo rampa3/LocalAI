@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-This is an extra gRPC server of LocalAI for Kokoro TTS
+This is an extra gRPC server of LocalAI for Kitten TTS
 """
 from concurrent import futures
 import time
@@ -12,7 +12,7 @@ import backend_pb2
 import backend_pb2_grpc
 
 import torch
-from kokoro import KPipeline
+from kittentts import KittenTTS
 import soundfile as sf
 
 import grpc
@@ -22,7 +22,7 @@ _ONE_DAY_IN_SECONDS = 60 * 60 * 24
 
 # If MAX_WORKERS are specified in the environment use it, otherwise default to 1
 MAX_WORKERS = int(os.environ.get('PYTHON_GRPC_MAX_WORKERS', '1'))
-KOKORO_LANG_CODE = os.environ.get('KOKORO_LANG_CODE', 'a')
+KITTEN_LANGUAGE = os.environ.get('KITTEN_LANGUAGE', None)
 
 # Implement the BackendServicer class with the service methods
 class BackendServicer(backend_pb2_grpc.BackendServicer):
@@ -31,9 +31,10 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
     """
     def Health(self, request, context):
         return backend_pb2.Reply(message=bytes("OK", 'utf-8'))
-    
     def LoadModel(self, request, context):
+
         # Get device
+        # device = "cuda" if request.CUDA else "cpu"
         if torch.cuda.is_available():
             print("CUDA is available", file=sys.stderr)
             device = "cuda"
@@ -44,49 +45,42 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
         if not torch.cuda.is_available() and request.CUDA:
             return backend_pb2.Result(success=False, message="CUDA is not available")
 
-        try:
-            print("Preparing Kokoro TTS pipeline, please wait", file=sys.stderr)
-            # empty dict
-            self.options = {}
-            options = request.Options
-            # The options are a list of strings in this form optname:optvalue
-            # We are storing all the options in a dict so we can use it later when
-            # generating the images
-            for opt in options:
-                if ":" not in opt:
-                    continue
-                key, value = opt.split(":")
-                self.options[key] = value
+        self.AudioPath = None
+        # List available KittenTTS models
+        print("Available KittenTTS voices: expr-voice-2-m, expr-voice-2-f, expr-voice-3-m, expr-voice-3-f, expr-voice-4-m, expr-voice-4-f, expr-voice-5-m, expr-voice-5-f")
+        if os.path.isabs(request.AudioPath):
+            self.AudioPath = request.AudioPath
+        elif request.AudioPath and request.ModelFile != "" and not os.path.isabs(request.AudioPath):
+            # get base path of modelFile
+            modelFileBase = os.path.dirname(request.ModelFile)
+            # modify LoraAdapter to be relative to modelFileBase
+            self.AudioPath = os.path.join(modelFileBase, request.AudioPath)
 
-            # Initialize Kokoro pipeline with language code
-            lang_code = self.options.get("lang_code", KOKORO_LANG_CODE)
-            self.pipeline = KPipeline(lang_code=lang_code)
-            print(f"Kokoro TTS pipeline loaded with language code: {lang_code}", file=sys.stderr)
+        try:
+            print("Preparing KittenTTS model, please wait", file=sys.stderr)
+            # Use the model name from request.Model, defaulting to "KittenML/kitten-tts-nano-0.1" if not specified
+            model_name = request.Model if request.Model else "KittenML/kitten-tts-nano-0.1"
+            self.tts = KittenTTS(model_name)
         except Exception as err:
             return backend_pb2.Result(success=False, message=f"Unexpected {err=}, {type(err)=}")
-        
-        return backend_pb2.Result(message="Kokoro TTS pipeline loaded successfully", success=True)
+        # Implement your logic here for the LoadModel service
+        # Replace this with your desired response
+        return backend_pb2.Result(message="Model loaded successfully", success=True)
 
     def TTS(self, request, context):
         try:
-            # Get voice from request, default to 'af_heart' if not specified
-            voice = request.voice if request.voice else 'af_heart'
+            # KittenTTS doesn't use language parameter like TTS, so we ignore it
+            # For multi-speaker models, use voice parameter
+            voice = request.voice if request.voice else "expr-voice-2-f"
             
-            # Generate audio using Kokoro pipeline
-            generator = self.pipeline(request.text, voice=voice)
+            # Generate audio using KittenTTS
+            audio = self.tts.generate(request.text, voice=voice)
             
-            # Get the first (and typically only) audio segment
-            for i, (gs, ps, audio) in enumerate(generator):
-                # Save audio to the destination file
-                sf.write(request.dst, audio, 24000)
-                print(f"Generated audio segment {i}: gs={gs}, ps={ps}", file=sys.stderr)
-                # For now, we only process the first segment
-                # If you need to handle multiple segments, you might want to modify this
-                break
-                
+            # Save the audio using soundfile
+            sf.write(request.dst, audio, 24000)
+            
         except Exception as err:
             return backend_pb2.Result(success=False, message=f"Unexpected {err=}, {type(err)=}")
-        
         return backend_pb2.Result(success=True)
 
 def serve(address):

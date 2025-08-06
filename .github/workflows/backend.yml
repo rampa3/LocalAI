@@ -313,7 +313,7 @@ jobs:
             platforms: 'linux/amd64'
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-transformers'
-            runs-on: 'ubuntu-latest'
+            runs-on: 'arc-runner-set'
             base-image: "rocm/dev-ubuntu-22.04:6.1"
             skip-drivers: 'false'
             backend: "transformers"
@@ -325,7 +325,7 @@ jobs:
             platforms: 'linux/amd64'
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-diffusers'
-            runs-on: 'ubuntu-latest'
+            runs-on: 'arc-runner-set'
             base-image: "rocm/dev-ubuntu-22.04:6.1"
             skip-drivers: 'false'
             backend: "diffusers"
@@ -920,6 +920,19 @@ jobs:
           #   backend: "rfdetr"
           #   dockerfile: "./backend/Dockerfile.python"
           #   context: "./backend"
+          # kitten-tts
+          - build-type: ''
+            cuda-major-version: ""
+            cuda-minor-version: ""
+            platforms: 'linux/amd64,linux/arm64'
+            tag-latest: 'auto'
+            tag-suffix: '-kitten-tts'
+            runs-on: 'ubuntu-latest'
+            base-image: "ubuntu:22.04"
+            skip-drivers: 'false'
+            backend: "kitten-tts"
+            dockerfile: "./backend/Dockerfile.python"
+            context: "./backend"
   llama-cpp-darwin:
     runs-on: macOS-14
     strategy:
@@ -955,6 +968,7 @@ jobs:
           path: build/llama-cpp.tar
   llama-cpp-darwin-publish:
     needs: llama-cpp-darwin
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Download llama-cpp.tar
@@ -1043,6 +1057,7 @@ jobs:
           name: llama-cpp-tar-x86
           path: build/llama-cpp.tar
   llama-cpp-darwin-x86-publish:
+    if: github.event_name != 'pull_request'
     needs: llama-cpp-darwin-x86
     runs-on: ubuntu-latest
     steps:

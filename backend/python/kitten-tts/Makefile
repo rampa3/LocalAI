@@ -1,18 +1,18 @@
-.PHONY: kokoro
-kokoro: protogen
+.PHONY: kitten-tts
+kitten-tts: protogen
 	bash install.sh
 
 .PHONY: run
 run: protogen
-	@echo "Running kokoro..."
+	@echo "Running kitten-tts..."
 	bash run.sh
-	@echo "kokoro run."
+	@echo "kitten-tts run."
 
 .PHONY: test
 test: protogen
-	@echo "Testing kokoro..."
+	@echo "Testing kitten-tts..."
 	bash test.sh
-	@echo "kokoro tested."
+	@echo "kitten-tts tested."
 
 .PHONY: protogen
 protogen: backend_pb2_grpc.py backend_pb2.py
