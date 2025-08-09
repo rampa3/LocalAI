@@ -1,6 +1,6 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 transformers
 accelerate
-torch+cpu
+torch==2.7.1+cpu
 kokoro
 soundfile
