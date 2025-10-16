@@ -1,3 +1,5 @@
+// Package gallery provides installation and registration utilities for LocalAI backends,
+// including meta-backend resolution based on system capabilities.
 package gallery
 
 import (
@@ -5,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/mudler/LocalAI/core/config"
@@ -19,6 +22,12 @@ const (
 	metadataFile = "metadata.json"
 	runFile      = "run.sh"
 )
+
+// backendCandidate represents an installed concrete backend option for a given alias
+type backendCandidate struct {
+	name    string
+	runFile string
+}
 
 // readBackendMetadata reads the metadata JSON file for a backend
 func readBackendMetadata(backendPath string) (*BackendMetadata, error) {
@@ -58,15 +67,15 @@ func writeBackendMetadata(backendPath string, metadata *BackendMetadata) error {
 	return nil
 }
 
-// Installs a model from the gallery
-func InstallBackendFromGallery(galleries []config.Gallery, systemState *system.SystemState, name string, basePath string, downloadStatus func(string, string, string, float64), force bool) error {
+// InstallBackendFromGallery installs a backend from the gallery.
+func InstallBackendFromGallery(galleries []config.Gallery, systemState *system.SystemState, modelLoader *model.ModelLoader, name string, downloadStatus func(string, string, string, float64), force bool) error {
 	if !force {
 		// check if we already have the backend installed
-		backends, err := ListSystemBackends(basePath)
+		backends, err := ListSystemBackends(systemState)
 		if err != nil {
 			return err
 		}
-		if _, ok := backends[name]; ok {
+		if backends.Exists(name) {
 			return nil
 		}
 	}
@@ -77,12 +86,12 @@ func InstallBackendFromGallery(galleries []config.Gallery, systemState *system.S
 
 	log.Debug().Interface("galleries", galleries).Str("name", name).Msg("Installing backend from gallery")
 
-	backends, err := AvailableBackends(galleries, basePath)
+	backends, err := AvailableBackends(galleries, systemState)
 	if err != nil {
 		return err
 	}
 
-	backend := FindGalleryElement(backends, name, basePath)
+	backend := FindGalleryElement(backends, name)
 	if backend == nil {
 		return fmt.Errorf("no backend found with name %q", name)
 	}
@@ -99,12 +108,12 @@ func InstallBackendFromGallery(galleries []config.Gallery, systemState *system.S
 		log.Debug().Str("name", name).Str("bestBackend", bestBackend.Name).Msg("Installing backend from meta backend")
 
 		// Then, let's install the best backend
-		if err := InstallBackend(basePath, bestBackend, downloadStatus); err != nil {
+		if err := InstallBackend(systemState, modelLoader, bestBackend, downloadStatus); err != nil {
 			return err
 		}
 
 		// we need now to create a path for the meta backend, with the alias to the installed ones so it can be used to remove it
-		metaBackendPath := filepath.Join(basePath, name)
+		metaBackendPath := filepath.Join(systemState.Backend.BackendsPath, name)
 		if err := os.MkdirAll(metaBackendPath, 0750); err != nil {
 			return fmt.Errorf("failed to create meta backend path %q: %v", metaBackendPath, err)
 		}
@@ -124,12 +133,12 @@ func InstallBackendFromGallery(galleries []config.Gallery, systemState *system.S
 		return nil
 	}
 
-	return InstallBackend(basePath, backend, downloadStatus)
+	return InstallBackend(systemState, modelLoader, backend, downloadStatus)
 }
 
-func InstallBackend(basePath string, config *GalleryBackend, downloadStatus func(string, string, string, float64)) error {
+func InstallBackend(systemState *system.SystemState, modelLoader *model.ModelLoader, config *GalleryBackend, downloadStatus func(string, string, string, float64)) error {
 	// Create base path if it doesn't exist
-	err := os.MkdirAll(basePath, 0750)
+	err := os.MkdirAll(systemState.Backend.BackendsPath, 0750)
 	if err != nil {
 		return fmt.Errorf("failed to create base path: %v", err)
 	}
@@ -139,7 +148,7 @@ func InstallBackend(basePath string, config *GalleryBackend, downloadStatus func
 	}
 
 	name := config.Name
-	backendPath := filepath.Join(basePath, name)
+	backendPath := filepath.Join(systemState.Backend.BackendsPath, name)
 	err = os.MkdirAll(backendPath, 0750)
 	if err != nil {
 		return fmt.Errorf("failed to create base path: %v", err)
@@ -185,17 +194,31 @@ func InstallBackend(basePath string, config *GalleryBackend, downloadStatus func
 		return fmt.Errorf("failed to write metadata for backend %q: %v", name, err)
 	}
 
-	return nil
+	return RegisterBackends(systemState, modelLoader)
 }
 
-func DeleteBackendFromSystem(basePath string, name string) error {
-	backendDirectory := filepath.Join(basePath, name)
+func DeleteBackendFromSystem(systemState *system.SystemState, name string) error {
+	backends, err := ListSystemBackends(systemState)
+	if err != nil {
+		return err
+	}
+
+	backend, ok := backends.Get(name)
+	if !ok {
+		return fmt.Errorf("backend %q not found", name)
+	}
+
+	if backend.IsSystem {
+		return fmt.Errorf("system backend %q cannot be deleted", name)
+	}
+
+	backendDirectory := filepath.Join(systemState.Backend.BackendsPath, name)
 
 	// check if the backend dir exists
 	if _, err := os.Stat(backendDirectory); os.IsNotExist(err) {
 		// if doesn't exist, it might be an alias, so we need to check if we have a matching alias in
 		// all the backends in the basePath
-		backends, err := os.ReadDir(basePath)
+		backends, err := os.ReadDir(systemState.Backend.BackendsPath)
 		if err != nil {
 			return err
 		}
@@ -203,12 +226,12 @@ func DeleteBackendFromSystem(basePath string, name string) error {
 
 		for _, backend := range backends {
 			if backend.IsDir() {
-				metadata, err := readBackendMetadata(filepath.Join(basePath, backend.Name()))
+				metadata, err := readBackendMetadata(filepath.Join(systemState.Backend.BackendsPath, backend.Name()))
 				if err != nil {
 					return err
 				}
 				if metadata != nil && metadata.Alias == name {
-					backendDirectory = filepath.Join(basePath, backend.Name())
+					backendDirectory = filepath.Join(systemState.Backend.BackendsPath, backend.Name())
 					foundBackend = true
 					break
 				}
@@ -228,7 +251,7 @@ func DeleteBackendFromSystem(basePath string, name string) error {
 	}
 
 	if metadata != nil && metadata.MetaBackendFor != "" {
-		metaBackendDirectory := filepath.Join(basePath, metadata.MetaBackendFor)
+		metaBackendDirectory := filepath.Join(systemState.Backend.BackendsPath, metadata.MetaBackendFor)
 		log.Debug().Str("backendDirectory", metaBackendDirectory).Msg("Deleting meta backend")
 		if _, err := os.Stat(metaBackendDirectory); os.IsNotExist(err) {
 			return fmt.Errorf("meta backend %q not found", metadata.MetaBackendFor)
@@ -239,66 +262,167 @@ func DeleteBackendFromSystem(basePath string, name string) error {
 	return os.RemoveAll(backendDirectory)
 }
 
-func ListSystemBackends(basePath string) (map[string]string, error) {
-	backends, err := os.ReadDir(basePath)
+type SystemBackend struct {
+	Name     string
+	RunFile  string
+	IsMeta   bool
+	IsSystem bool
+	Metadata *BackendMetadata
+}
+
+type SystemBackends map[string]SystemBackend
+
+func (b SystemBackends) Exists(name string) bool {
+	_, ok := b[name]
+	return ok
+}
+
+func (b SystemBackends) Get(name string) (SystemBackend, bool) {
+	backend, ok := b[name]
+	return backend, ok
+}
+
+func (b SystemBackends) GetAll() []SystemBackend {
+	backends := make([]SystemBackend, 0)
+	for _, backend := range b {
+		backends = append(backends, backend)
+	}
+	return backends
+}
+
+func ListSystemBackends(systemState *system.SystemState) (SystemBackends, error) {
+	// Gather backends from system and user paths, then resolve alias conflicts by capability.
+	backends := make(SystemBackends)
+
+	// System-provided backends
+	if systemBackends, err := os.ReadDir(systemState.Backend.BackendsSystemPath); err == nil {
+		for _, systemBackend := range systemBackends {
+			if systemBackend.IsDir() {
+				run := filepath.Join(systemState.Backend.BackendsSystemPath, systemBackend.Name(), runFile)
+				if _, err := os.Stat(run); err == nil {
+					backends[systemBackend.Name()] = SystemBackend{
+						Name:     systemBackend.Name(),
+						RunFile:  run,
+						IsMeta:   false,
+						IsSystem: true,
+						Metadata: nil,
+					}
+				}
+			}
+		}
+	} else {
+		log.Warn().Err(err).Msg("Failed to read system backends, proceeding with user-managed backends")
+	}
+
+	// User-managed backends and alias collection
+	entries, err := os.ReadDir(systemState.Backend.BackendsPath)
 	if err != nil {
 		return nil, err
 	}
 
-	backendsNames := make(map[string]string)
+	aliasGroups := make(map[string][]backendCandidate)
+	metaMap := make(map[string]*BackendMetadata)
 
-	for _, backend := range backends {
-		if backend.IsDir() {
-			runFile := filepath.Join(basePath, backend.Name(), runFile)
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		dir := e.Name()
+		run := filepath.Join(systemState.Backend.BackendsPath, dir, runFile)
 
-			var metadata *BackendMetadata
-
-			// If metadata file does not exist, we just use the directory name
-			// and we do not fill the other metadata (such as potential backend Aliases)
-			metadataFilePath := filepath.Join(basePath, backend.Name(), metadataFile)
-			if _, err := os.Stat(metadataFilePath); os.IsNotExist(err) {
-				metadata = &BackendMetadata{
-					Name: backend.Name(),
-				}
+		var metadata *BackendMetadata
+		metadataPath := filepath.Join(systemState.Backend.BackendsPath, dir, metadataFile)
+		if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
+			metadata = &BackendMetadata{Name: dir}
+		} else {
+			m, rerr := readBackendMetadata(filepath.Join(systemState.Backend.BackendsPath, dir))
+			if rerr != nil {
+				return nil, rerr
+			}
+			if m == nil {
+				metadata = &BackendMetadata{Name: dir}
 			} else {
-				// Check for alias in metadata
-				metadata, err = readBackendMetadata(filepath.Join(basePath, backend.Name()))
-				if err != nil {
-					return nil, err
-				}
+				metadata = m
 			}
+		}
 
-			if metadata == nil {
-				continue
+		metaMap[dir] = metadata
+
+		// Concrete backend entry
+		if _, err := os.Stat(run); err == nil {
+			backends[dir] = SystemBackend{
+				Name:     dir,
+				RunFile:  run,
+				IsMeta:   false,
+				Metadata: metadata,
 			}
+		}
 
-			if _, exists := backendsNames[backend.Name()]; !exists {
-				// We don't want to override aliases if already set, and if we are meta backend
-				if _, err := os.Stat(runFile); err == nil {
-					backendsNames[backend.Name()] = runFile
-				} else {
-					backendsNames[backend.Name()] = ""
-				}
-			}
+		// Alias candidates
+		if metadata.Alias != "" {
+			aliasGroups[metadata.Alias] = append(aliasGroups[metadata.Alias], backendCandidate{name: dir, runFile: run})
+		}
 
-			if metadata.Alias != "" {
-				backendsNames[metadata.Alias] = runFile
+		// Meta backends indirection
+		if metadata.MetaBackendFor != "" {
+			backends[metadata.Name] = SystemBackend{
+				Name:     metadata.Name,
+				RunFile:  filepath.Join(systemState.Backend.BackendsPath, metadata.MetaBackendFor, runFile),
+				IsMeta:   true,
+				Metadata: metadata,
 			}
 		}
 	}
 
-	return backendsNames, nil
+	// Resolve aliases using system capability preferences
+	tokens := systemState.BackendPreferenceTokens()
+	for alias, cands := range aliasGroups {
+		chosen := backendCandidate{}
+		// Try preference tokens
+		for _, t := range tokens {
+			for _, c := range cands {
+				if strings.Contains(strings.ToLower(c.name), t) && c.runFile != "" {
+					chosen = c
+					break
+				}
+			}
+			if chosen.runFile != "" {
+				break
+			}
+		}
+		// Fallback: first runnable
+		if chosen.runFile == "" {
+			for _, c := range cands {
+				if c.runFile != "" {
+					chosen = c
+					break
+				}
+			}
+		}
+		if chosen.runFile == "" {
+			continue
+		}
+		md := metaMap[chosen.name]
+		backends[alias] = SystemBackend{
+			Name:     alias,
+			RunFile:  chosen.runFile,
+			IsMeta:   false,
+			Metadata: md,
+		}
+	}
+
+	return backends, nil
 }
 
-func RegisterBackends(basePath string, modelLoader *model.ModelLoader) error {
-	backends, err := ListSystemBackends(basePath)
+func RegisterBackends(systemState *system.SystemState, modelLoader *model.ModelLoader) error {
+	backends, err := ListSystemBackends(systemState)
 	if err != nil {
 		return err
 	}
 
-	for name, runFile := range backends {
-		log.Debug().Str("name", name).Str("runFile", runFile).Msg("Registering backend")
-		modelLoader.SetExternalBackend(name, runFile)
+	for _, backend := range backends {
+		log.Debug().Str("name", backend.Name).Str("runFile", backend.RunFile).Msg("Registering backend")
+		modelLoader.SetExternalBackend(backend.Name, backend.RunFile)
 	}
 
 	return nil

@@ -2,6 +2,7 @@ GOCMD=go
 GOTEST=$(GOCMD) test
 GOVET=$(GOCMD) vet
 BINARY_NAME=local-ai
+LAUNCHER_BINARY_NAME=local-ai-launcher
 
 GORELEASER?=
 
@@ -90,7 +91,17 @@ build: protogen-go install-go-tools ## Build the project
 	$(info ${GREEN}I LD_FLAGS: ${YELLOW}$(LD_FLAGS)${RESET})
 	$(info ${GREEN}I UPX: ${YELLOW}$(UPX)${RESET})
 	rm -rf $(BINARY_NAME) || true
-	CGO_LDFLAGS="$(CGO_LDFLAGS)" $(GOCMD) build -ldflags "$(LD_FLAGS)" -tags "$(GO_TAGS)" -o $(BINARY_NAME) ./
+	CGO_LDFLAGS="$(CGO_LDFLAGS)" $(GOCMD) build -ldflags "$(LD_FLAGS)" -tags "$(GO_TAGS)" -o $(BINARY_NAME) ./cmd/local-ai
+
+build-launcher: ## Build the launcher application
+	$(info ${GREEN}I local-ai launcher build info:${RESET})
+	$(info ${GREEN}I BUILD_TYPE: ${YELLOW}$(BUILD_TYPE)${RESET})
+	$(info ${GREEN}I GO_TAGS: ${YELLOW}$(GO_TAGS)${RESET})
+	$(info ${GREEN}I LD_FLAGS: ${YELLOW}$(LD_FLAGS)${RESET})
+	rm -rf $(LAUNCHER_BINARY_NAME) || true
+	CGO_LDFLAGS="$(CGO_LDFLAGS)" $(GOCMD) build -ldflags "$(LD_FLAGS)" -tags "$(GO_TAGS)" -o $(LAUNCHER_BINARY_NAME) ./cmd/launcher
+
+build-all: build build-launcher ## Build both server and launcher
 
 dev-dist:
 	$(GORELEASER) build --snapshot --clean
@@ -106,8 +117,8 @@ run: ## run local-ai
 	CGO_LDFLAGS="$(CGO_LDFLAGS)" $(GOCMD) run ./
 
 test-models/testmodel.ggml:
-	mkdir test-models
-	mkdir test-dir
+	mkdir -p test-models
+	mkdir -p test-dir
 	wget -q https://huggingface.co/mradermacher/gpt2-alpaca-gpt4-GGUF/resolve/main/gpt2-alpaca-gpt4.Q4_K_M.gguf -O test-models/testmodel.ggml
 	wget -q https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin -O test-models/whisper-en
 	wget -q https://huggingface.co/mudler/all-MiniLM-L6-v2/resolve/main/ggml-model-q4_0.bin -O test-models/bert
@@ -131,39 +142,6 @@ test: test-models/testmodel.ggml protogen-go
 	$(MAKE) test-llama-gguf
 	$(MAKE) test-tts
 	$(MAKE) test-stablediffusion
-
-backends/diffusers: docker-build-diffusers docker-save-diffusers build
-	./local-ai backends install "ocifile://$(abspath ./backend-images/diffusers.tar)"
-
-backends/llama-cpp: docker-build-llama-cpp docker-save-llama-cpp build
-	./local-ai backends install "ocifile://$(abspath ./backend-images/llama-cpp.tar)"
-
-backends/piper: docker-build-piper docker-save-piper build
-	./local-ai backends install "ocifile://$(abspath ./backend-images/piper.tar)"
-
-backends/stablediffusion-ggml: docker-build-stablediffusion-ggml docker-save-stablediffusion-ggml build
-	./local-ai backends install "ocifile://$(abspath ./backend-images/stablediffusion-ggml.tar)"
-
-backends/whisper: docker-build-whisper docker-save-whisper build
-	./local-ai backends install "ocifile://$(abspath ./backend-images/whisper.tar)"
-
-backends/silero-vad: docker-build-silero-vad docker-save-silero-vad build
-	./local-ai backends install "ocifile://$(abspath ./backend-images/silero-vad.tar)"
-
-backends/local-store: docker-build-local-store docker-save-local-store build
-	./local-ai backends install "ocifile://$(abspath ./backend-images/local-store.tar)"
-
-backends/huggingface: docker-build-huggingface docker-save-huggingface build
-	./local-ai backends install "ocifile://$(abspath ./backend-images/huggingface.tar)"
-
-backends/rfdetr: docker-build-rfdetr docker-save-rfdetr build
-	./local-ai backends install "ocifile://$(abspath ./backend-images/rfdetr.tar)"
-
-backends/kitten-tts: docker-build-kitten-tts docker-save-kitten-tts build
-	./local-ai backends install "ocifile://$(abspath ./backend-images/kitten-tts.tar)"
-
-backends/kokoro: docker-build-kokoro docker-save-kokoro build
-	./local-ai backends install "ocifile://$(abspath ./backend-images/kokoro.tar)"
 
 ########################################################
 ## AIO tests
@@ -357,6 +335,76 @@ docker-image-intel:
 ## Backends
 ########################################################
 
+
+backends/diffusers: docker-build-diffusers docker-save-diffusers build
+	./local-ai backends install "ocifile://$(abspath ./backend-images/diffusers.tar)"
+
+backends/llama-cpp: docker-build-llama-cpp docker-save-llama-cpp build
+	./local-ai backends install "ocifile://$(abspath ./backend-images/llama-cpp.tar)"
+
+backends/piper: docker-build-piper docker-save-piper build
+	./local-ai backends install "ocifile://$(abspath ./backend-images/piper.tar)"
+
+backends/stablediffusion-ggml: docker-build-stablediffusion-ggml docker-save-stablediffusion-ggml build
+	./local-ai backends install "ocifile://$(abspath ./backend-images/stablediffusion-ggml.tar)"
+
+backends/whisper: docker-build-whisper docker-save-whisper build
+	./local-ai backends install "ocifile://$(abspath ./backend-images/whisper.tar)"
+
+backends/silero-vad: docker-build-silero-vad docker-save-silero-vad build
+	./local-ai backends install "ocifile://$(abspath ./backend-images/silero-vad.tar)"
+
+backends/local-store: docker-build-local-store docker-save-local-store build
+	./local-ai backends install "ocifile://$(abspath ./backend-images/local-store.tar)"
+
+backends/huggingface: docker-build-huggingface docker-save-huggingface build
+	./local-ai backends install "ocifile://$(abspath ./backend-images/huggingface.tar)"
+
+backends/rfdetr: docker-build-rfdetr docker-save-rfdetr build
+	./local-ai backends install "ocifile://$(abspath ./backend-images/rfdetr.tar)"
+
+backends/kitten-tts: docker-build-kitten-tts docker-save-kitten-tts build
+	./local-ai backends install "ocifile://$(abspath ./backend-images/kitten-tts.tar)"
+
+backends/kokoro: docker-build-kokoro docker-save-kokoro build
+	./local-ai backends install "ocifile://$(abspath ./backend-images/kokoro.tar)"
+
+backends/chatterbox: docker-build-chatterbox docker-save-chatterbox build
+	./local-ai backends install "ocifile://$(abspath ./backend-images/chatterbox.tar)"
+
+backends/llama-cpp-darwin: build
+	bash ./scripts/build/llama-cpp-darwin.sh
+	./local-ai backends install "ocifile://$(abspath ./backend-images/llama-cpp.tar)"
+
+backends/neutts: docker-build-neutts docker-save-neutts build
+	./local-ai backends install "ocifile://$(abspath ./backend-images/neutts.tar)"
+
+build-darwin-python-backend: build
+	bash ./scripts/build/python-darwin.sh
+
+build-darwin-go-backend: build
+	bash ./scripts/build/golang-darwin.sh
+
+backends/mlx:
+	BACKEND=mlx $(MAKE) build-darwin-python-backend
+	./local-ai backends install "ocifile://$(abspath ./backend-images/mlx.tar)"
+
+backends/diffuser-darwin:
+	BACKEND=diffusers $(MAKE) build-darwin-python-backend
+	./local-ai backends install "ocifile://$(abspath ./backend-images/diffusers.tar)"
+
+backends/mlx-vlm:
+	BACKEND=mlx-vlm $(MAKE) build-darwin-python-backend
+	./local-ai backends install "ocifile://$(abspath ./backend-images/mlx-vlm.tar)"
+
+backends/mlx-audio:
+	BACKEND=mlx-audio $(MAKE) build-darwin-python-backend
+	./local-ai backends install "ocifile://$(abspath ./backend-images/mlx-audio.tar)"
+
+backends/stablediffusion-ggml-darwin:
+	BACKEND=stablediffusion-ggml BUILD_TYPE=metal $(MAKE) build-darwin-go-backend
+	./local-ai backends install "ocifile://$(abspath ./backend-images/stablediffusion-ggml.tar)"
+
 backend-images:
 	mkdir -p backend-images
 
@@ -383,6 +431,15 @@ docker-build-kitten-tts:
 
 docker-save-kitten-tts: backend-images
 	docker save local-ai-backend:kitten-tts -o backend-images/kitten-tts.tar
+
+docker-save-chatterbox: backend-images
+	docker save local-ai-backend:chatterbox -o backend-images/chatterbox.tar
+
+docker-build-neutts:
+	docker build --build-arg BUILD_TYPE=$(BUILD_TYPE) --build-arg BASE_IMAGE=$(BASE_IMAGE) -t local-ai-backend:neutts -f backend/Dockerfile.python --build-arg BACKEND=neutts ./backend
+
+docker-save-neutts: backend-images
+	docker save local-ai-backend:neutts -o backend-images/neutts.tar
 
 docker-build-kokoro:
 	docker build --build-arg BUILD_TYPE=$(BUILD_TYPE) --build-arg BASE_IMAGE=$(BASE_IMAGE) -t local-ai-backend:kokoro -f backend/Dockerfile.python --build-arg BACKEND=kokoro ./backend
@@ -455,7 +512,7 @@ docker-build-bark:
 	docker build --build-arg BUILD_TYPE=$(BUILD_TYPE) --build-arg BASE_IMAGE=$(BASE_IMAGE) -t local-ai-backend:bark -f backend/Dockerfile.python --build-arg BACKEND=bark .
 
 docker-build-chatterbox:
-	docker build --build-arg BUILD_TYPE=$(BUILD_TYPE) --build-arg BASE_IMAGE=$(BASE_IMAGE) -t local-ai-backend:chatterbox -f backend/Dockerfile.python --build-arg BACKEND=chatterbox .
+	docker build --build-arg BUILD_TYPE=$(BUILD_TYPE) --build-arg BASE_IMAGE=$(BASE_IMAGE) -t local-ai-backend:chatterbox -f backend/Dockerfile.python --build-arg BACKEND=chatterbox ./backend
 
 docker-build-exllama2:
 	docker build --build-arg BUILD_TYPE=$(BUILD_TYPE) --build-arg BASE_IMAGE=$(BASE_IMAGE) -t local-ai-backend:exllama2 -f backend/Dockerfile.python --build-arg BACKEND=exllama2 .
@@ -491,3 +548,19 @@ docs-clean:
 .PHONY: docs
 docs: docs/static/gallery.html
 	cd docs && hugo serve
+
+########################################################
+## Platform-specific builds
+########################################################
+
+## fyne cross-platform build
+build-launcher-darwin: build-launcher
+	go run github.com/tiagomelo/macos-dmg-creator/cmd/createdmg@latest \
+	--appName "LocalAI" \
+	--appBinaryPath "$(LAUNCHER_BINARY_NAME)" \
+	--bundleIdentifier "com.localai.launcher" \
+	--iconPath "core/http/static/logo.png" \
+	--outputDir "dist/"
+
+build-launcher-linux:
+	cd cmd/launcher && go run fyne.io/tools/cmd/fyne@latest package -os linux -icon ../../core/http/static/logo.png --executable $(LAUNCHER_BINARY_NAME)-linux && mv launcher.tar.xz ../../$(LAUNCHER_BINARY_NAME)-linux.tar.xz

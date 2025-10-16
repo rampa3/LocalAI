@@ -16,38 +16,21 @@ import (
 )
 
 type BackendMonitorService struct {
-	backendConfigLoader *config.BackendConfigLoader
-	modelLoader         *model.ModelLoader
-	options             *config.ApplicationConfig // Taking options in case we need to inspect ExternalGRPCBackends, though that's out of scope for now, hence the name.
+	modelConfigLoader *config.ModelConfigLoader
+	modelLoader       *model.ModelLoader
+	options           *config.ApplicationConfig // Taking options in case we need to inspect ExternalGRPCBackends, though that's out of scope for now, hence the name.
 }
 
-func NewBackendMonitorService(modelLoader *model.ModelLoader, configLoader *config.BackendConfigLoader, appConfig *config.ApplicationConfig) *BackendMonitorService {
+func NewBackendMonitorService(modelLoader *model.ModelLoader, configLoader *config.ModelConfigLoader, appConfig *config.ApplicationConfig) *BackendMonitorService {
 	return &BackendMonitorService{
-		modelLoader:         modelLoader,
-		backendConfigLoader: configLoader,
-		options:             appConfig,
+		modelLoader:       modelLoader,
+		modelConfigLoader: configLoader,
+		options:           appConfig,
 	}
-}
-
-func (bms BackendMonitorService) getModelLoaderIDFromModelName(modelName string) (string, error) {
-	config, exists := bms.backendConfigLoader.GetBackendConfig(modelName)
-	var backendId string
-	if exists {
-		backendId = config.Model
-	} else {
-		// Last ditch effort: use it raw, see if a backend happens to match.
-		backendId = modelName
-	}
-
-	if !strings.HasSuffix(backendId, ".bin") {
-		backendId = fmt.Sprintf("%s.bin", backendId)
-	}
-
-	return backendId, nil
 }
 
 func (bms *BackendMonitorService) SampleLocalBackendProcess(model string) (*schema.BackendMonitorResponse, error) {
-	config, exists := bms.backendConfigLoader.GetBackendConfig(model)
+	config, exists := bms.modelConfigLoader.GetModelConfig(model)
 	var backend string
 	if exists {
 		backend = config.Model
@@ -102,21 +85,17 @@ func (bms *BackendMonitorService) SampleLocalBackendProcess(model string) (*sche
 }
 
 func (bms BackendMonitorService) CheckAndSample(modelName string) (*proto.StatusResponse, error) {
-	backendId, err := bms.getModelLoaderIDFromModelName(modelName)
-	if err != nil {
-		return nil, err
-	}
-	modelAddr := bms.modelLoader.CheckIsLoaded(backendId)
+	modelAddr := bms.modelLoader.CheckIsLoaded(modelName)
 	if modelAddr == nil {
-		return nil, fmt.Errorf("backend %s is not currently loaded", backendId)
+		return nil, fmt.Errorf("backend %s is not currently loaded", modelName)
 	}
 
 	status, rpcErr := modelAddr.GRPC(false, nil).Status(context.TODO())
 	if rpcErr != nil {
-		log.Warn().Msgf("backend %s experienced an error retrieving status info: %s", backendId, rpcErr.Error())
-		val, slbErr := bms.SampleLocalBackendProcess(backendId)
+		log.Warn().Msgf("backend %s experienced an error retrieving status info: %s", modelName, rpcErr.Error())
+		val, slbErr := bms.SampleLocalBackendProcess(modelName)
 		if slbErr != nil {
-			return nil, fmt.Errorf("backend %s experienced an error retrieving status info via rpc: %s, then failed local node process sample: %s", backendId, rpcErr.Error(), slbErr.Error())
+			return nil, fmt.Errorf("backend %s experienced an error retrieving status info via rpc: %s, then failed local node process sample: %s", modelName, rpcErr.Error(), slbErr.Error())
 		}
 		return &proto.StatusResponse{
 			State: proto.StatusResponse_ERROR,
@@ -132,9 +111,5 @@ func (bms BackendMonitorService) CheckAndSample(modelName string) (*proto.Status
 }
 
 func (bms BackendMonitorService) ShutdownModel(modelName string) error {
-	backendId, err := bms.getModelLoaderIDFromModelName(modelName)
-	if err != nil {
-		return err
-	}
-	return bms.modelLoader.ShutdownModel(backendId)
+	return bms.modelLoader.ShutdownModel(modelName)
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/mudler/LocalAI/core/gallery"
 	"github.com/mudler/LocalAI/pkg/downloader"
+	"github.com/mudler/LocalAI/pkg/system"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"gopkg.in/yaml.v3"
@@ -320,12 +321,17 @@ var _ = Describe("API test", func() {
 				},
 			}
 
+			systemState, err := system.GetSystemState(
+				system.WithBackendPath(backendPath),
+				system.WithModelPath(modelDir),
+			)
+			Expect(err).ToNot(HaveOccurred())
+
 			application, err := application.New(
 				append(commonOpts,
 					config.WithContext(c),
+					config.WithSystemState(systemState),
 					config.WithGalleries(galleries),
-					config.WithModelPath(modelDir),
-					config.WithBackendsPath(backendPath),
 					config.WithApiKeys([]string{apiKey}),
 				)...)
 			Expect(err).ToNot(HaveOccurred())
@@ -523,13 +529,18 @@ var _ = Describe("API test", func() {
 				},
 			}
 
+			systemState, err := system.GetSystemState(
+				system.WithBackendPath(backendPath),
+				system.WithModelPath(modelDir),
+			)
+			Expect(err).ToNot(HaveOccurred())
+
 			application, err := application.New(
 				append(commonOpts,
 					config.WithContext(c),
 					config.WithGeneratedContentDir(tmpdir),
-					config.WithBackendsPath(backendPath),
+					config.WithSystemState(systemState),
 					config.WithGalleries(galleries),
-					config.WithModelPath(modelDir),
 				)...,
 			)
 			Expect(err).ToNot(HaveOccurred())
@@ -729,12 +740,17 @@ var _ = Describe("API test", func() {
 
 			var err error
 
+			systemState, err := system.GetSystemState(
+				system.WithBackendPath(backendPath),
+				system.WithModelPath(modelPath),
+			)
+			Expect(err).ToNot(HaveOccurred())
+
 			application, err := application.New(
 				append(commonOpts,
 					config.WithExternalBackend("transformers", os.Getenv("HUGGINGFACE_GRPC")),
 					config.WithContext(c),
-					config.WithBackendsPath(backendPath),
-					config.WithModelPath(modelPath),
+					config.WithSystemState(systemState),
 				)...)
 			Expect(err).ToNot(HaveOccurred())
 			app, err = API(application)
@@ -783,7 +799,7 @@ var _ = Describe("API test", func() {
 		It("returns errors", func() {
 			_, err := client.CreateCompletion(context.TODO(), openai.CompletionRequest{Model: "foomodel", Prompt: testPrompt})
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("error, status code: 500, message: could not load model - all backends returned error:"))
+			Expect(err.Error()).To(ContainSubstring("error, status code: 500, status: 500 Internal Server Error, message: could not load model - all backends returned error:"))
 		})
 
 		It("shows the external backend", func() {
@@ -820,27 +836,40 @@ var _ = Describe("API test", func() {
 			if runtime.GOOS != "linux" {
 				Skip("test supported only on linux")
 			}
+			embeddingModel := openai.AdaEmbeddingV2
 			resp, err := client.CreateEmbeddings(
 				context.Background(),
 				openai.EmbeddingRequest{
-					Model: openai.AdaEmbeddingV2,
+					Model: embeddingModel,
 					Input: []string{"sun", "cat"},
 				},
 			)
 			Expect(err).ToNot(HaveOccurred(), err)
-			Expect(len(resp.Data[0].Embedding)).To(BeNumerically("==", 2048))
-			Expect(len(resp.Data[1].Embedding)).To(BeNumerically("==", 2048))
+			Expect(len(resp.Data[0].Embedding)).To(BeNumerically("==", 4096))
+			Expect(len(resp.Data[1].Embedding)).To(BeNumerically("==", 4096))
 
 			sunEmbedding := resp.Data[0].Embedding
 			resp2, err := client.CreateEmbeddings(
 				context.Background(),
 				openai.EmbeddingRequest{
-					Model: openai.AdaEmbeddingV2,
+					Model: embeddingModel,
 					Input: []string{"sun"},
 				},
 			)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(resp2.Data[0].Embedding).To(Equal(sunEmbedding))
+			Expect(resp2.Data[0].Embedding).ToNot(Equal(resp.Data[1].Embedding))
+
+			resp3, err := client.CreateEmbeddings(
+				context.Background(),
+				openai.EmbeddingRequest{
+					Model: embeddingModel,
+					Input: []string{"cat"},
+				},
+			)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(resp3.Data[0].Embedding).To(Equal(resp.Data[1].Embedding))
+			Expect(resp3.Data[0].Embedding).ToNot(Equal(sunEmbedding))
 		})
 
 		Context("External gRPC calls", func() {
@@ -960,11 +989,17 @@ var _ = Describe("API test", func() {
 			c, cancel = context.WithCancel(context.Background())
 
 			var err error
+
+			systemState, err := system.GetSystemState(
+				system.WithBackendPath(backendPath),
+				system.WithModelPath(modelPath),
+			)
+			Expect(err).ToNot(HaveOccurred())
+
 			application, err := application.New(
 				append(commonOpts,
 					config.WithContext(c),
-					config.WithModelPath(modelPath),
-					config.WithBackendsPath(backendPath),
+					config.WithSystemState(systemState),
 					config.WithConfigFile(os.Getenv("CONFIG_FILE")))...,
 			)
 			Expect(err).ToNot(HaveOccurred())

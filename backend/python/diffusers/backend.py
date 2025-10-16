@@ -18,7 +18,7 @@ import backend_pb2_grpc
 import grpc
 
 from diffusers import SanaPipeline, StableDiffusion3Pipeline, StableDiffusionXLPipeline, StableDiffusionDepth2ImgPipeline, DPMSolverMultistepScheduler, StableDiffusionPipeline, DiffusionPipeline, \
-    EulerAncestralDiscreteScheduler, FluxPipeline, FluxTransformer2DModel
+    EulerAncestralDiscreteScheduler, FluxPipeline, FluxTransformer2DModel, QwenImageEditPipeline, AutoencoderKLWan, WanPipeline, WanImageToVideoPipeline
 from diffusers import StableDiffusionImg2ImgPipeline, AutoPipelineForText2Image, ControlNetModel, StableVideoDiffusionPipeline, Lumina2Text2ImgPipeline
 from diffusers.pipelines.stable_diffusion import safety_checker
 from diffusers.utils import load_image, export_to_video
@@ -72,18 +72,20 @@ from diffusers.schedulers import (
 )
 
 def is_float(s):
+    """Check if a string can be converted to float."""
     try:
         float(s)
         return True
     except ValueError:
         return False
-
 def is_int(s):
+    """Check if a string can be converted to int."""
     try:
         int(s)
         return True
     except ValueError:
         return False
+
 
 # The scheduler list mapping was taken from here: https://github.com/neggles/animatediff-cli/blob/6f336f5f4b5e38e85d7f06f1744ef42d0a45f2a7/src/animatediff/schedulers.py#L39
 # Credits to https://github.com/neggles
@@ -194,6 +196,8 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
                     value = float(value)
                 elif is_int(value):
                     value = int(value)
+                elif value.lower() in ["true", "false"]:
+                    value = value.lower() == "true"
                 self.options[key] = value
 
             # From options, extract if present "torch_dtype" and set it to the appropriate type; if on CPU, always force float32
@@ -276,6 +280,9 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
             elif request.PipelineType == "DiffusionPipeline":
                 self.pipe = DiffusionPipeline.from_pretrained(request.Model,
                                                               torch_dtype=torchType)
+            elif request.PipelineType == "QwenImageEditPipeline":
+                self.pipe = QwenImageEditPipeline.from_pretrained(request.Model,
+                                                                 torch_dtype=torchType)
             elif request.PipelineType == "VideoDiffusionPipeline":
                 self.txt2vid = True
                 self.pipe = DiffusionPipeline.from_pretrained(request.Model,
@@ -352,6 +359,32 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
                     torch_dtype=torch.bfloat16)
                 self.pipe.vae.to(torch.bfloat16)
                 self.pipe.text_encoder.to(torch.bfloat16)
+            elif request.PipelineType == "WanPipeline":
+                # WAN2.2 pipeline requires special VAE handling
+                vae = AutoencoderKLWan.from_pretrained(
+                    request.Model, 
+                    subfolder="vae", 
+                    torch_dtype=torch.float32
+                )
+                self.pipe = WanPipeline.from_pretrained(
+                    request.Model,
+                    vae=vae,
+                    torch_dtype=torchType
+                )
+                self.txt2vid = True  # WAN2.2 is a text-to-video pipeline
+            elif request.PipelineType == "WanImageToVideoPipeline":
+                # WAN2.2 image-to-video pipeline
+                vae = AutoencoderKLWan.from_pretrained(
+                    request.Model, 
+                    subfolder="vae", 
+                    torch_dtype=torch.float32
+                )
+                self.pipe = WanImageToVideoPipeline.from_pretrained(
+                    request.Model,
+                    vae=vae,
+                    torch_dtype=torchType
+                )
+                self.img2vid = True  # WAN2.2 image-to-video pipeline
 
             if CLIPSKIP and request.CLIPSkip != 0:
                 self.clip_skip = request.CLIPSkip
@@ -386,6 +419,9 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
             device = "cpu" if not (request.CUDA & torch.cuda.is_available()) else "cuda"
             if XPU:
                 device = "xpu"
+            mps_available = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+            if mps_available:
+                device = "mps"
             self.device = device
             if request.LoraAdapter:
                 # Check if its a local file and not a directory ( we load lora differently for a safetensor file )
@@ -492,11 +528,24 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
             "num_inference_steps": steps,
         }
 
-        if request.src != "" and not self.controlnet and not self.img2vid:
-            image = Image.open(request.src)
+        # Handle image source: prioritize RefImages over request.src
+        image_src = None
+        if hasattr(request, 'ref_images') and request.ref_images and len(request.ref_images) > 0:
+            # Use the first reference image if available
+            image_src = request.ref_images[0]
+            print(f"Using reference image: {image_src}", file=sys.stderr)
+        elif request.src != "":
+            # Fall back to request.src if no ref_images
+            image_src = request.src
+            print(f"Using source image: {image_src}", file=sys.stderr)
+        else:
+            print("No image source provided", file=sys.stderr)
+        
+        if image_src and not self.controlnet and not self.img2vid:
+            image = Image.open(image_src)
             options["image"] = image
-        elif self.controlnet and request.src:
-            pose_image = load_image(request.src)
+        elif self.controlnet and image_src:
+            pose_image = load_image(image_src)
             options["image"] = pose_image
 
         if CLIPSKIP and self.clip_skip != 0:
@@ -538,7 +587,11 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
 
         if self.img2vid:
             # Load the conditioning image
-            image = load_image(request.src)
+            if image_src:
+                image = load_image(image_src)
+            else:
+                # Fallback to request.src for img2vid if no ref_images
+                image = load_image(request.src)
             image = image.resize((1024, 576))
 
             generator = torch.manual_seed(request.seed)
@@ -574,6 +627,96 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
         image.save(request.dst)
 
         return backend_pb2.Result(message="Media generated", success=True)
+
+    def GenerateVideo(self, request, context):
+        try:
+            prompt = request.prompt
+            if not prompt:
+                return backend_pb2.Result(success=False, message="No prompt provided for video generation")
+
+            # Set default values from request or use defaults
+            num_frames = request.num_frames if request.num_frames > 0 else 81
+            fps = request.fps if request.fps > 0 else 16
+            cfg_scale = request.cfg_scale if request.cfg_scale > 0 else 4.0
+            num_inference_steps = request.step if request.step > 0 else 40
+            
+            # Prepare generation parameters
+            kwargs = {
+                "prompt": prompt,
+                "negative_prompt": request.negative_prompt if request.negative_prompt else "",
+                "height": request.height if request.height > 0 else 720,
+                "width": request.width if request.width > 0 else 1280,
+                "num_frames": num_frames,
+                "guidance_scale": cfg_scale,
+                "num_inference_steps": num_inference_steps,
+            }
+
+            # Add custom options from self.options (including guidance_scale_2 if specified)
+            kwargs.update(self.options)
+
+            # Set seed if provided
+            if request.seed > 0:
+                kwargs["generator"] = torch.Generator(device=self.device).manual_seed(request.seed)
+
+            # Handle start and end images for video generation
+            if request.start_image:
+                kwargs["start_image"] = load_image(request.start_image)
+            if request.end_image:
+                kwargs["end_image"] = load_image(request.end_image)
+
+            print(f"Generating video with {kwargs=}", file=sys.stderr)
+
+            # Generate video frames based on pipeline type
+            if self.PipelineType == "WanPipeline":
+                # WAN2.2 text-to-video generation
+                output = self.pipe(**kwargs)
+                frames = output.frames[0]  # WAN2.2 returns frames in this format
+            elif self.PipelineType == "WanImageToVideoPipeline":
+                # WAN2.2 image-to-video generation
+                if request.start_image:
+                    # Load and resize the input image according to WAN2.2 requirements
+                    image = load_image(request.start_image)
+                    # Use request dimensions or defaults, but respect WAN2.2 constraints
+                    request_height = request.height if request.height > 0 else 480
+                    request_width = request.width if request.width > 0 else 832
+                    max_area = request_height * request_width
+                    aspect_ratio = image.height / image.width
+                    mod_value = self.pipe.vae_scale_factor_spatial * self.pipe.transformer.config.patch_size[1]
+                    height = round((max_area * aspect_ratio) ** 0.5 / mod_value) * mod_value
+                    width = round((max_area / aspect_ratio) ** 0.5 / mod_value) * mod_value
+                    image = image.resize((width, height))
+                    kwargs["image"] = image
+                    kwargs["height"] = height
+                    kwargs["width"] = width
+                
+                output = self.pipe(**kwargs)
+                frames = output.frames[0]
+            elif self.img2vid:
+                # Generic image-to-video generation
+                if request.start_image:
+                    image = load_image(request.start_image)
+                    image = image.resize((request.width if request.width > 0 else 1024, 
+                                       request.height if request.height > 0 else 576))
+                    kwargs["image"] = image
+                
+                output = self.pipe(**kwargs)
+                frames = output.frames[0]
+            elif self.txt2vid:
+                # Generic text-to-video generation
+                output = self.pipe(**kwargs)
+                frames = output.frames[0]
+            else:
+                return backend_pb2.Result(success=False, message=f"Pipeline {self.PipelineType} does not support video generation")
+
+            # Export video
+            export_to_video(frames, request.dst, fps=fps)
+            
+            return backend_pb2.Result(message="Video generated successfully", success=True)
+
+        except Exception as err:
+            print(f"Error generating video: {err}", file=sys.stderr)
+            traceback.print_exc()
+            return backend_pb2.Result(success=False, message=f"Error generating video: {err}")
 
 
 def serve(address):

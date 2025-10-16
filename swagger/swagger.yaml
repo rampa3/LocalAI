@@ -195,19 +195,6 @@ definitions:
           type: string
         type: array
     type: object
-  p2p.NodeData:
-    properties:
-      id:
-        type: string
-      lastSeen:
-        type: string
-      name:
-        type: string
-      serviceID:
-        type: string
-      tunnelAddress:
-        type: string
-    type: object
   proto.MemoryUsageData:
     properties:
       breakdown:
@@ -434,6 +421,19 @@ definitions:
       object:
         type: string
     type: object
+  schema.NodeData:
+    properties:
+      id:
+        type: string
+      lastSeen:
+        type: string
+      name:
+        type: string
+      serviceID:
+        type: string
+      tunnelAddress:
+        type: string
+    type: object
   schema.OpenAIModel:
     properties:
       id:
@@ -611,11 +611,11 @@ definitions:
     properties:
       federated_nodes:
         items:
-          $ref: '#/definitions/p2p.NodeData'
+          $ref: '#/definitions/schema.NodeData'
         type: array
       nodes:
         items:
-          $ref: '#/definitions/p2p.NodeData'
+          $ref: '#/definitions/schema.NodeData'
         type: array
     type: object
   schema.SysInfoModel:
@@ -689,6 +689,35 @@ definitions:
         type: array
       model:
         type: string
+    type: object
+  schema.VideoRequest:
+    properties:
+      cfg_scale:
+        type: number
+      end_image:
+        type: string
+      fps:
+        type: integer
+      height:
+        type: integer
+      model:
+        type: string
+      negative_prompt:
+        type: string
+      num_frames:
+        type: integer
+      prompt:
+        type: string
+      response_format:
+        type: string
+      seed:
+        type: integer
+      start_image:
+        type: string
+      step:
+        type: integer
+      width:
+        type: integer
     type: object
   services.GalleryOpStatus:
     properties:
@@ -843,6 +872,21 @@ paths:
           schema:
             $ref: '#/definitions/services.GalleryOpStatus'
       summary: Returns the job status
+  /mcp/v1/completions:
+    post:
+      parameters:
+      - description: query params
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/schema.OpenAIRequest'
+      responses:
+        "200":
+          description: Response
+          schema:
+            $ref: '#/definitions/schema.OpenAIResponse'
+      summary: Generate completions for a given prompt and model.
   /metrics:
     get:
       parameters:
@@ -1203,7 +1247,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/schema.OpenAIRequest'
+          $ref: '#/definitions/schema.VideoRequest'
       responses:
         "200":
           description: Response

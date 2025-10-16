@@ -27,11 +27,11 @@ import (
 // @Param request body schema.OpenAIRequest true "query params"
 // @Success 200 {object} schema.OpenAIResponse "Response"
 // @Router /v1/completions [post]
-func CompletionEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluator *templates.Evaluator, appConfig *config.ApplicationConfig) func(c *fiber.Ctx) error {
-	created := int(time.Now().Unix())
-
-	process := func(id string, s string, req *schema.OpenAIRequest, config *config.BackendConfig, loader *model.ModelLoader, responses chan schema.OpenAIResponse, extraUsage bool) {
+func CompletionEndpoint(cl *config.ModelConfigLoader, ml *model.ModelLoader, evaluator *templates.Evaluator, appConfig *config.ApplicationConfig) func(c *fiber.Ctx) error {
+	process := func(id string, s string, req *schema.OpenAIRequest, config *config.ModelConfig, loader *model.ModelLoader, responses chan schema.OpenAIResponse, extraUsage bool) error {
 		tokenCallback := func(s string, tokenUsage backend.TokenUsage) bool {
+			created := int(time.Now().Unix())
+
 			usage := schema.OpenAIUsage{
 				PromptTokens:     tokenUsage.Prompt,
 				CompletionTokens: tokenUsage.Completion,
@@ -59,11 +59,15 @@ func CompletionEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, e
 			responses <- resp
 			return true
 		}
-		ComputeChoices(req, s, config, cl, appConfig, loader, func(s string, c *[]schema.Choice) {}, tokenCallback)
+		_, _, err := ComputeChoices(req, s, config, cl, appConfig, loader, func(s string, c *[]schema.Choice) {}, tokenCallback)
 		close(responses)
+		return err
 	}
 
 	return func(c *fiber.Ctx) error {
+
+		created := int(time.Now().Unix())
+
 		// Handle Correlation
 		id := c.Get("X-Correlation-ID", uuid.New().String())
 		extraUsage := c.Get("Extra-Usage", "") != ""
@@ -73,7 +77,7 @@ func CompletionEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, e
 			return fiber.ErrBadRequest
 		}
 
-		config, ok := c.Locals(middleware.CONTEXT_LOCALS_KEY_MODEL_CONFIG).(*config.BackendConfig)
+		config, ok := c.Locals(middleware.CONTEXT_LOCALS_KEY_MODEL_CONFIG).(*config.ModelConfig)
 		if !ok || config == nil {
 			return fiber.ErrBadRequest
 		}
@@ -121,18 +125,37 @@ func CompletionEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, e
 
 			responses := make(chan schema.OpenAIResponse)
 
-			go process(id, predInput, input, config, ml, responses, extraUsage)
+			ended := make(chan error)
+			go func() {
+				ended <- process(id, predInput, input, config, ml, responses, extraUsage)
+			}()
 
 			c.Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
 
-				for ev := range responses {
-					var buf bytes.Buffer
-					enc := json.NewEncoder(&buf)
-					enc.Encode(ev)
+			LOOP:
+				for {
+					select {
+					case ev := <-responses:
+						if len(ev.Choices) == 0 {
+							log.Debug().Msgf("No choices in the response, skipping")
+							continue
+						}
+						var buf bytes.Buffer
+						enc := json.NewEncoder(&buf)
+						enc.Encode(ev)
 
-					log.Debug().Msgf("Sending chunk: %s", buf.String())
-					fmt.Fprintf(w, "data: %v\n", buf.String())
-					w.Flush()
+						log.Debug().Msgf("Sending chunk: %s", buf.String())
+						fmt.Fprintf(w, "data: %v\n", buf.String())
+						w.Flush()
+					case err := <-ended:
+						if err == nil {
+							break LOOP
+						}
+						log.Error().Msgf("Stream ended with error: %v", err)
+						fmt.Fprintf(w, "data: %v\n", "Internal error: "+err.Error())
+						w.Flush()
+						break LOOP
+					}
 				}
 
 				resp := &schema.OpenAIResponse{
@@ -153,7 +176,7 @@ func CompletionEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, e
 				w.WriteString("data: [DONE]\n\n")
 				w.Flush()
 			}))
-			return nil
+			return <-ended
 		}
 
 		var result []schema.Choice

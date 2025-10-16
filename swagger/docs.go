@@ -215,6 +215,30 @@ const docTemplate = `{
                 }
             }
         },
+        "/mcp/v1/completions": {
+            "post": {
+                "summary": "Generate completions for a given prompt and model.",
+                "parameters": [
+                    {
+                        "description": "query params",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/schema.OpenAIRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Response",
+                        "schema": {
+                            "$ref": "#/definitions/schema.OpenAIResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/metrics": {
             "get": {
                 "summary": "Prometheus metrics endpoint",
@@ -782,7 +806,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/schema.OpenAIRequest"
+                            "$ref": "#/definitions/schema.VideoRequest"
                         }
                     }
                 ],
@@ -1084,26 +1108,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                }
-            }
-        },
-        "p2p.NodeData": {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "string"
-                },
-                "lastSeen": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "serviceID": {
-                    "type": "string"
-                },
-                "tunnelAddress": {
-                    "type": "string"
                 }
             }
         },
@@ -1451,6 +1455,26 @@ const docTemplate = `{
                 }
             }
         },
+        "schema.NodeData": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "lastSeen": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "serviceID": {
+                    "type": "string"
+                },
+                "tunnelAddress": {
+                    "type": "string"
+                }
+            }
+        },
         "schema.OpenAIModel": {
             "type": "object",
             "properties": {
@@ -1704,13 +1728,13 @@ const docTemplate = `{
                 "federated_nodes": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/p2p.NodeData"
+                        "$ref": "#/definitions/schema.NodeData"
                     }
                 },
                 "nodes": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/p2p.NodeData"
+                        "$ref": "#/definitions/schema.NodeData"
                     }
                 }
             }
@@ -1820,6 +1844,50 @@ const docTemplate = `{
                 },
                 "model": {
                     "type": "string"
+                }
+            }
+        },
+        "schema.VideoRequest": {
+            "type": "object",
+            "properties": {
+                "cfg_scale": {
+                    "type": "number"
+                },
+                "end_image": {
+                    "type": "string"
+                },
+                "fps": {
+                    "type": "integer"
+                },
+                "height": {
+                    "type": "integer"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "negative_prompt": {
+                    "type": "string"
+                },
+                "num_frames": {
+                    "type": "integer"
+                },
+                "prompt": {
+                    "type": "string"
+                },
+                "response_format": {
+                    "type": "string"
+                },
+                "seed": {
+                    "type": "integer"
+                },
+                "start_image": {
+                    "type": "string"
+                },
+                "step": {
+                    "type": "integer"
+                },
+                "width": {
+                    "type": "integer"
                 }
             }
         },

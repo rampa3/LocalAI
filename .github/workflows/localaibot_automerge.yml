@@ -6,14 +6,15 @@ permissions:
   contents: write
   pull-requests: write
   packages: read
-
+  issues: write # for Homebrew/actions/post-comment
+  actions: write # to dispatch publish workflow
 jobs:
   dependabot:
     runs-on: ubuntu-latest
-    if: ${{ github.actor == 'localai-bot' }}
+    if: ${{ github.actor == 'localai-bot' && !contains(github.event.pull_request.title, 'gallery:') }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Approve a PR if not already approved
         run: |

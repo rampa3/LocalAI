@@ -11,6 +11,7 @@ import (
 	"github.com/mudler/LocalAI/core/config"
 	lconfig "github.com/mudler/LocalAI/core/config"
 	"github.com/mudler/LocalAI/pkg/downloader"
+	"github.com/mudler/LocalAI/pkg/model"
 	"github.com/mudler/LocalAI/pkg/system"
 	"github.com/mudler/LocalAI/pkg/utils"
 
@@ -72,7 +73,9 @@ type PromptTemplate struct {
 // Installs a model from the gallery
 func InstallModelFromGallery(
 	modelGalleries, backendGalleries []config.Gallery,
-	name string, basePath, backendBasePath string, req GalleryModel, downloadStatus func(string, string, string, float64), enforceScan, automaticallyInstallBackend bool) error {
+	systemState *system.SystemState,
+	modelLoader *model.ModelLoader,
+	name string, req GalleryModel, downloadStatus func(string, string, string, float64), enforceScan, automaticallyInstallBackend bool) error {
 
 	applyModel := func(model *GalleryModel) error {
 		name = strings.ReplaceAll(name, string(os.PathSeparator), "__")
@@ -81,7 +84,7 @@ func InstallModelFromGallery(
 
 		if len(model.URL) > 0 {
 			var err error
-			config, err = GetGalleryConfigFromURL[ModelConfig](model.URL, basePath)
+			config, err = GetGalleryConfigFromURL[ModelConfig](model.URL, systemState.Model.ModelsPath)
 			if err != nil {
 				return err
 			}
@@ -122,19 +125,15 @@ func InstallModelFromGallery(
 			return err
 		}
 
-		installedModel, err := InstallModel(basePath, installName, &config, model.Overrides, downloadStatus, enforceScan)
+		installedModel, err := InstallModel(systemState, installName, &config, model.Overrides, downloadStatus, enforceScan)
 		if err != nil {
 			return err
 		}
 		log.Debug().Msgf("Installed model %q", installedModel.Name)
 		if automaticallyInstallBackend && installedModel.Backend != "" {
 			log.Debug().Msgf("Installing backend %q", installedModel.Backend)
-			systemState, err := system.GetSystemState()
-			if err != nil {
-				return err
-			}
 
-			if err := InstallBackendFromGallery(backendGalleries, systemState, installedModel.Backend, backendBasePath, downloadStatus, false); err != nil {
+			if err := InstallBackendFromGallery(backendGalleries, systemState, modelLoader, installedModel.Backend, downloadStatus, false); err != nil {
 				return err
 			}
 		}
@@ -142,12 +141,12 @@ func InstallModelFromGallery(
 		return nil
 	}
 
-	models, err := AvailableGalleryModels(modelGalleries, basePath)
+	models, err := AvailableGalleryModels(modelGalleries, systemState)
 	if err != nil {
 		return err
 	}
 
-	model := FindGalleryElement(models, name, basePath)
+	model := FindGalleryElement(models, name)
 	if model == nil {
 		return fmt.Errorf("no model found with name %q", name)
 	}
@@ -155,7 +154,8 @@ func InstallModelFromGallery(
 	return applyModel(model)
 }
 
-func InstallModel(basePath, nameOverride string, config *ModelConfig, configOverrides map[string]interface{}, downloadStatus func(string, string, string, float64), enforceScan bool) (*lconfig.BackendConfig, error) {
+func InstallModel(systemState *system.SystemState, nameOverride string, config *ModelConfig, configOverrides map[string]interface{}, downloadStatus func(string, string, string, float64), enforceScan bool) (*lconfig.ModelConfig, error) {
+	basePath := systemState.Model.ModelsPath
 	// Create base path if it doesn't exist
 	err := os.MkdirAll(basePath, 0750)
 	if err != nil {
@@ -221,7 +221,7 @@ func InstallModel(basePath, nameOverride string, config *ModelConfig, configOver
 		return nil, err
 	}
 
-	backendConfig := lconfig.BackendConfig{}
+	modelConfig := lconfig.ModelConfig{}
 
 	// write config file
 	if len(configOverrides) != 0 || len(config.ConfigFile) != 0 {
@@ -246,12 +246,12 @@ func InstallModel(basePath, nameOverride string, config *ModelConfig, configOver
 			return nil, fmt.Errorf("failed to marshal updated config YAML: %v", err)
 		}
 
-		err = yaml.Unmarshal(updatedConfigYAML, &backendConfig)
+		err = yaml.Unmarshal(updatedConfigYAML, &modelConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal updated config YAML: %v", err)
 		}
 
-		if !backendConfig.Validate() {
+		if !modelConfig.Validate() {
 			return nil, fmt.Errorf("failed to validate updated config YAML")
 		}
 
@@ -272,7 +272,7 @@ func InstallModel(basePath, nameOverride string, config *ModelConfig, configOver
 
 	log.Debug().Msgf("Written gallery file %s", modelFile)
 
-	return &backendConfig, os.WriteFile(modelFile, data, 0600)
+	return &modelConfig, os.WriteFile(modelFile, data, 0600)
 }
 
 func galleryFileName(name string) string {
@@ -285,44 +285,64 @@ func GetLocalModelConfiguration(basePath string, name string) (*ModelConfig, err
 	return ReadConfigFile[ModelConfig](galleryFile)
 }
 
-func DeleteModelFromSystem(basePath string, name string, additionalFiles []string) error {
-	// os.PathSeparator is not allowed in model names. Replace them with "__" to avoid conflicts with file paths.
-	name = strings.ReplaceAll(name, string(os.PathSeparator), "__")
+func DeleteModelFromSystem(systemState *system.SystemState, name string) error {
+	additionalFiles := []string{}
 
-	configFile := filepath.Join(basePath, fmt.Sprintf("%s.yaml", name))
+	configFile := filepath.Join(systemState.Model.ModelsPath, fmt.Sprintf("%s.yaml", name))
+	if err := utils.VerifyPath(configFile, systemState.Model.ModelsPath); err != nil {
+		return fmt.Errorf("failed to verify path %s: %w", configFile, err)
+	}
+	// Galleryname is the name of the model in this case
+	dat, err := os.ReadFile(configFile)
+	if err == nil {
+		modelConfig := &config.ModelConfig{}
 
-	galleryFile := filepath.Join(basePath, galleryFileName(name))
+		err = yaml.Unmarshal(dat, &modelConfig)
+		if err != nil {
+			return err
+		}
+		if modelConfig.Model != "" {
+			additionalFiles = append(additionalFiles, modelConfig.ModelFileName())
+		}
 
-	for _, f := range []string{configFile, galleryFile} {
-		if err := utils.VerifyPath(f, basePath); err != nil {
-			return fmt.Errorf("failed to verify path %s: %w", f, err)
+		if modelConfig.MMProj != "" {
+			additionalFiles = append(additionalFiles, modelConfig.MMProjFileName())
 		}
 	}
 
-	var err error
-	// Delete all the files associated to the model
-	// read the model config
-	galleryconfig, err := ReadConfigFile[ModelConfig](galleryFile)
-	if err != nil {
-		log.Error().Err(err).Msgf("failed to read gallery file %s", configFile)
+	// os.PathSeparator is not allowed in model names. Replace them with "__" to avoid conflicts with file paths.
+	name = strings.ReplaceAll(name, string(os.PathSeparator), "__")
+
+	galleryFile := filepath.Join(systemState.Model.ModelsPath, galleryFileName(name))
+	if err := utils.VerifyPath(galleryFile, systemState.Model.ModelsPath); err != nil {
+		return fmt.Errorf("failed to verify path %s: %w", galleryFile, err)
 	}
 
 	var filesToRemove []string
 
-	// Remove additional files
-	if galleryconfig != nil {
+	// Delete all the files associated to the model
+	// read the model config
+	galleryconfig, err := ReadConfigFile[ModelConfig](galleryFile)
+	if err == nil && galleryconfig != nil {
 		for _, f := range galleryconfig.Files {
-			fullPath := filepath.Join(basePath, f.Filename)
+			fullPath := filepath.Join(systemState.Model.ModelsPath, f.Filename)
+			if err := utils.VerifyPath(fullPath, systemState.Model.ModelsPath); err != nil {
+				return fmt.Errorf("failed to verify path %s: %w", fullPath, err)
+			}
 			filesToRemove = append(filesToRemove, fullPath)
 		}
+	} else {
+		log.Error().Err(err).Msgf("failed to read gallery file %s", configFile)
 	}
 
 	for _, f := range additionalFiles {
-		fullPath := filepath.Join(filepath.Join(basePath, f))
+		fullPath := filepath.Join(filepath.Join(systemState.Model.ModelsPath, f))
+		if err := utils.VerifyPath(fullPath, systemState.Model.ModelsPath); err != nil {
+			return fmt.Errorf("failed to verify path %s: %w", fullPath, err)
+		}
 		filesToRemove = append(filesToRemove, fullPath)
 	}
 
-	filesToRemove = append(filesToRemove, configFile)
 	filesToRemove = append(filesToRemove, galleryFile)
 
 	// skip duplicates
@@ -331,17 +351,17 @@ func DeleteModelFromSystem(basePath string, name string, additionalFiles []strin
 	// Removing files
 	for _, f := range filesToRemove {
 		if e := os.Remove(f); e != nil {
-			err = errors.Join(err, fmt.Errorf("failed to remove file %s: %w", f, e))
+			log.Error().Err(e).Msgf("failed to remove file %s", f)
 		}
 	}
 
-	return err
+	return os.Remove(configFile)
 }
 
 // This is ***NEVER*** going to be perfect or finished.
 // This is a BEST EFFORT function to surface known-vulnerable models to users.
-func SafetyScanGalleryModels(galleries []config.Gallery, basePath string) error {
-	galleryModels, err := AvailableGalleryModels(galleries, basePath)
+func SafetyScanGalleryModels(galleries []config.Gallery, systemState *system.SystemState) error {
+	galleryModels, err := AvailableGalleryModels(galleries, systemState)
 	if err != nil {
 		return err
 	}

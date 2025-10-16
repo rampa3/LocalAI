@@ -99,6 +99,30 @@ jobs:
             backend: "diffusers"
             dockerfile: "./backend/Dockerfile.python"
             context: "./backend"
+          - build-type: ''
+            cuda-major-version: ""
+            cuda-minor-version: ""
+            platforms: 'linux/amd64'
+            tag-latest: 'auto'
+            tag-suffix: '-cpu-diffusers'
+            runs-on: 'ubuntu-latest'
+            base-image: "ubuntu:22.04"
+            skip-drivers: 'true'
+            backend: "diffusers"
+            dockerfile: "./backend/Dockerfile.python"
+            context: "./backend"
+          - build-type: ''
+            cuda-major-version: ""
+            cuda-minor-version: ""
+            platforms: 'linux/amd64'
+            tag-latest: 'auto'
+            tag-suffix: '-cpu-chatterbox'
+            runs-on: 'ubuntu-latest'
+            base-image: "ubuntu:22.04"
+            skip-drivers: 'true'
+            backend: "chatterbox"
+            dockerfile: "./backend/Dockerfile.python"
+            context: "./backend"
           # CUDA 11 additional backends
           - build-type: 'cublas'
             cuda-major-version: "11"
@@ -191,7 +215,7 @@ jobs:
             platforms: 'linux/amd64'
             tag-latest: 'auto'
             tag-suffix: '-gpu-nvidia-cuda-12-vllm'
-            runs-on: 'ubuntu-latest'
+            runs-on: 'arc-runner-set'
             base-image: "ubuntu:22.04"
             skip-drivers: 'false'
             backend: "vllm"
@@ -218,7 +242,7 @@ jobs:
             runs-on: 'ubuntu-latest'
             base-image: "ubuntu:22.04"
             skip-drivers: 'false'
-            backend: "diffusers"            
+            backend: "diffusers"
             dockerfile: "./backend/Dockerfile.python"
             context: "./backend"
           # CUDA 12 additional backends
@@ -290,7 +314,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-rerankers'
             runs-on: 'ubuntu-latest'
-            base-image: "rocm/dev-ubuntu-22.04:6.1"
+            base-image: "rocm/dev-ubuntu-22.04:6.4.3"
             skip-drivers: 'false'
             backend: "rerankers"
             dockerfile: "./backend/Dockerfile.python"
@@ -302,7 +326,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-llama-cpp'
             runs-on: 'ubuntu-latest'
-            base-image: "rocm/dev-ubuntu-22.04:6.1"
+            base-image: "rocm/dev-ubuntu-22.04:6.4.3"
             skip-drivers: 'false'
             backend: "llama-cpp"
             dockerfile: "./backend/Dockerfile.llama-cpp"
@@ -313,8 +337,8 @@ jobs:
             platforms: 'linux/amd64'
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-vllm'
-            runs-on: 'ubuntu-latest'
-            base-image: "rocm/dev-ubuntu-22.04:6.1"
+            runs-on: 'arc-runner-set'
+            base-image: "rocm/dev-ubuntu-22.04:6.4.3"
             skip-drivers: 'false'
             backend: "vllm"
             dockerfile: "./backend/Dockerfile.python"
@@ -326,7 +350,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-transformers'
             runs-on: 'arc-runner-set'
-            base-image: "rocm/dev-ubuntu-22.04:6.1"
+            base-image: "rocm/dev-ubuntu-22.04:6.4.3"
             skip-drivers: 'false'
             backend: "transformers"
             dockerfile: "./backend/Dockerfile.python"
@@ -338,7 +362,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-diffusers'
             runs-on: 'arc-runner-set'
-            base-image: "rocm/dev-ubuntu-22.04:6.1"
+            base-image: "rocm/dev-ubuntu-22.04:6.4.3"
             skip-drivers: 'false'
             backend: "diffusers"
             dockerfile: "./backend/Dockerfile.python"
@@ -351,7 +375,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-kokoro'
             runs-on: 'arc-runner-set'
-            base-image: "rocm/dev-ubuntu-22.04:6.1"
+            base-image: "rocm/dev-ubuntu-22.04:6.4.3"
             skip-drivers: 'false'
             backend: "kokoro"
             dockerfile: "./backend/Dockerfile.python"
@@ -363,7 +387,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-faster-whisper'
             runs-on: 'ubuntu-latest'
-            base-image: "rocm/dev-ubuntu-22.04:6.1"
+            base-image: "rocm/dev-ubuntu-22.04:6.4.3"
             skip-drivers: 'false'
             backend: "faster-whisper"
             dockerfile: "./backend/Dockerfile.python"
@@ -375,7 +399,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-coqui'
             runs-on: 'ubuntu-latest'
-            base-image: "rocm/dev-ubuntu-22.04:6.1"
+            base-image: "rocm/dev-ubuntu-22.04:6.4.3"
             skip-drivers: 'false'
             backend: "coqui"
             dockerfile: "./backend/Dockerfile.python"
@@ -387,7 +411,7 @@ jobs:
             tag-latest: 'auto'
             tag-suffix: '-gpu-rocm-hipblas-bark'
             runs-on: 'arc-runner-set'
-            base-image: "rocm/dev-ubuntu-22.04:6.1"
+            base-image: "rocm/dev-ubuntu-22.04:6.4.3"
             skip-drivers: 'false'
             backend: "bark"
             dockerfile: "./backend/Dockerfile.python"
@@ -435,7 +459,7 @@ jobs:
             platforms: 'linux/amd64'
             tag-latest: 'auto'
             tag-suffix: '-gpu-intel-vllm'
-            runs-on: 'ubuntu-latest'
+            runs-on: 'arc-runner-set'
             base-image: "quay.io/go-skynet/intel-oneapi-base:latest"
             skip-drivers: 'false'
             backend: "vllm"
@@ -463,6 +487,18 @@ jobs:
             base-image: "quay.io/go-skynet/intel-oneapi-base:latest"
             skip-drivers: 'false'
             backend: "diffusers"
+            dockerfile: "./backend/Dockerfile.python"
+            context: "./backend"
+          - build-type: 'l4t'
+            cuda-major-version: "12"
+            cuda-minor-version: "0"
+            platforms: 'linux/arm64'
+            tag-latest: 'auto'
+            tag-suffix: '-gpu-nvidia-l4t-kokoro'
+            runs-on: 'ubuntu-24.04-arm'
+            base-image: "nvcr.io/nvidia/l4t-jetpack:r36.4.0"
+            skip-drivers: 'true'
+            backend: "kokoro"
             dockerfile: "./backend/Dockerfile.python"
             context: "./backend"
           # SYCL additional backends
@@ -751,8 +787,8 @@ jobs:
             cuda-minor-version: ""
             platforms: 'linux/amd64'
             tag-latest: 'auto'
-            tag-suffix: '-gpu-hipblas-whisper'
-            base-image: "rocm/dev-ubuntu-22.04:6.1"
+            tag-suffix: '-gpu-rocm-hipblas-whisper'
+            base-image: "rocm/dev-ubuntu-22.04:6.4.3"
             runs-on: 'ubuntu-latest'
             skip-drivers: 'false'
             backend: "whisper"
@@ -846,7 +882,7 @@ jobs:
             backend: "rfdetr"
             dockerfile: "./backend/Dockerfile.python"
             context: "./backend"
-          - build-type: 'cublas'
+          - build-type: 'l4t'
             cuda-major-version: "12"
             cuda-minor-version: "0"
             platforms: 'linux/arm64'
@@ -914,9 +950,21 @@ jobs:
             skip-drivers: 'true'
             tag-latest: 'auto'
             tag-suffix: '-gpu-hipblas-exllama2'
-            base-image: "rocm/dev-ubuntu-22.04:6.1"
+            base-image: "rocm/dev-ubuntu-22.04:6.4.3"
             runs-on: 'ubuntu-latest'
             backend: "exllama2"
+            dockerfile: "./backend/Dockerfile.python"
+            context: "./backend"
+          - build-type: 'l4t'
+            cuda-major-version: "12"
+            cuda-minor-version: "0"
+            platforms: 'linux/arm64'
+            skip-drivers: 'true'
+            tag-latest: 'auto'
+            tag-suffix: '-gpu-nvidia-l4t-arm64-chatterbox'
+            base-image: "nvcr.io/nvidia/l4t-jetpack:r36.4.0"
+            runs-on: 'ubuntu-24.04-arm'
+            backend: "chatterbox"
             dockerfile: "./backend/Dockerfile.python"
             context: "./backend"
           # runs out of space on the runner
@@ -926,7 +974,7 @@ jobs:
           #   platforms: 'linux/amd64'
           #   tag-latest: 'auto'
           #   tag-suffix: '-gpu-hipblas-rfdetr'
-          #   base-image: "rocm/dev-ubuntu-22.04:6.1"
+          #   base-image: "rocm/dev-ubuntu-22.04:6.4.3"
           #   runs-on: 'ubuntu-latest'
           #   skip-drivers: 'false'
           #   backend: "rfdetr"
@@ -945,6 +993,96 @@ jobs:
             backend: "kitten-tts"
             dockerfile: "./backend/Dockerfile.python"
             context: "./backend"
+          # neutts
+          - build-type: ''
+            cuda-major-version: ""
+            cuda-minor-version: ""
+            platforms: 'linux/amd64,linux/arm64'
+            tag-latest: 'auto'
+            tag-suffix: '-cpu-neutts'
+            runs-on: 'ubuntu-latest'
+            base-image: "ubuntu:22.04"
+            skip-drivers: 'false'
+            backend: "neutts"
+            dockerfile: "./backend/Dockerfile.python"
+            context: "./backend"
+          - build-type: 'cublas'
+            cuda-major-version: "12"
+            cuda-minor-version: "0"
+            platforms: 'linux/amd64'
+            tag-latest: 'auto'
+            tag-suffix: '-gpu-nvidia-cuda-12-neutts'
+            runs-on: 'ubuntu-latest'
+            base-image: "ubuntu:22.04"
+            skip-drivers: 'false'
+            backend: "neutts"
+            dockerfile: "./backend/Dockerfile.python"
+            context: "./backend"
+          - build-type: 'hipblas'
+            cuda-major-version: ""
+            cuda-minor-version: ""
+            platforms: 'linux/amd64'
+            tag-latest: 'auto'
+            tag-suffix: '-gpu-rocm-hipblas-neutts'
+            runs-on: 'arc-runner-set'
+            base-image: "rocm/dev-ubuntu-22.04:6.4.3"
+            skip-drivers: 'false'
+            backend: "neutts"
+            dockerfile: "./backend/Dockerfile.python"
+            context: "./backend"
+          - build-type: 'l4t'
+            cuda-major-version: "12"
+            cuda-minor-version: "0"
+            platforms: 'linux/arm64'
+            skip-drivers: 'true'
+            tag-latest: 'auto'
+            tag-suffix: '-nvidia-l4t-arm64-neutts'
+            base-image: "nvcr.io/nvidia/l4t-jetpack:r36.4.0"
+            runs-on: 'ubuntu-24.04-arm'
+            backend: "neutts"
+            dockerfile: "./backend/Dockerfile.python"
+            context: "./backend"
+  backend-jobs-darwin:
+    uses: ./.github/workflows/backend_build_darwin.yml
+    strategy:
+      matrix:
+        include:
+          - backend: "diffusers"
+            tag-suffix: "-metal-darwin-arm64-diffusers"
+            build-type: "mps"
+          - backend: "mlx"
+            tag-suffix: "-metal-darwin-arm64-mlx"
+            build-type: "mps"
+          - backend: "chatterbox"
+            tag-suffix: "-metal-darwin-arm64-chatterbox"
+            build-type: "mps"
+          - backend: "mlx-vlm"
+            tag-suffix: "-metal-darwin-arm64-mlx-vlm"
+            build-type: "mps"
+          - backend: "mlx-audio"
+            tag-suffix: "-metal-darwin-arm64-mlx-audio"
+            build-type: "mps"
+          - backend: "stablediffusion-ggml"
+            tag-suffix: "-metal-darwin-arm64-stablediffusion-ggml"
+            build-type: "metal"
+            lang: "go"
+          - backend: "whisper"
+            tag-suffix: "-metal-darwin-arm64-whisper"
+            build-type: "metal"
+            lang: "go"
+    with:
+      backend: ${{ matrix.backend }}
+      build-type: ${{ matrix.build-type }}
+      go-version: "1.24.x"
+      tag-suffix: ${{ matrix.tag-suffix }}
+      lang: ${{ matrix.lang || 'python' }}
+      use-pip: ${{ matrix.backend == 'diffusers' }}
+      runs-on: "macOS-14"
+    secrets:
+      dockerUsername: ${{ secrets.DOCKERHUB_USERNAME }}
+      dockerPassword: ${{ secrets.DOCKERHUB_PASSWORD }}
+      quayUsername: ${{ secrets.LOCALAI_REGISTRY_USERNAME }}
+      quayPassword: ${{ secrets.LOCALAI_REGISTRY_PASSWORD }}
   llama-cpp-darwin:
     runs-on: macOS-14
     strategy:
@@ -952,7 +1090,7 @@ jobs:
         go-version: ['1.21.x']
     steps:
       - name: Clone
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: true
       - name: Setup Go ${{ matrix.go-version }}
@@ -969,22 +1107,19 @@ jobs:
       - name: Build llama-cpp-darwin
         run: |
           make protogen-go
-          make build
-          bash scripts/build-llama-cpp-darwin.sh
-          ls -la build/darwin.tar
-          mv build/darwin.tar build/llama-cpp.tar
+          make backends/llama-cpp-darwin
       - name: Upload llama-cpp.tar
         uses: actions/upload-artifact@v4
         with:
           name: llama-cpp-tar
-          path: build/llama-cpp.tar
+          path: backend-images/llama-cpp.tar
   llama-cpp-darwin-publish:
     needs: llama-cpp-darwin
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Download llama-cpp.tar
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: llama-cpp-tar
           path: .
@@ -1041,7 +1176,7 @@ jobs:
         go-version: ['1.21.x']
     steps:
       - name: Clone
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: true
       - name: Setup Go ${{ matrix.go-version }}
@@ -1060,21 +1195,19 @@ jobs:
           make protogen-go
           make build
           export PLATFORMARCH=darwin/amd64
-          bash scripts/build-llama-cpp-darwin.sh
-          ls -la build/darwin.tar
-          mv build/darwin.tar build/llama-cpp.tar
+          make backends/llama-cpp-darwin
       - name: Upload llama-cpp.tar
         uses: actions/upload-artifact@v4
         with:
           name: llama-cpp-tar-x86
-          path: build/llama-cpp.tar
+          path: backend-images/llama-cpp.tar
   llama-cpp-darwin-x86-publish:
     if: github.event_name != 'pull_request'
     needs: llama-cpp-darwin-x86
     runs-on: ubuntu-latest
     steps:
       - name: Download llama-cpp.tar
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: llama-cpp-tar-x86
           path: .

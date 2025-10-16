@@ -10,6 +10,8 @@ import (
 
 	cliContext "github.com/mudler/LocalAI/core/cli/context"
 	"github.com/mudler/LocalAI/core/p2p"
+	"github.com/mudler/LocalAI/pkg/signals"
+	"github.com/mudler/LocalAI/pkg/system"
 	"github.com/phayes/freeport"
 	"github.com/rs/zerolog/log"
 )
@@ -25,6 +27,14 @@ type P2P struct {
 
 func (r *P2P) Run(ctx *cliContext.Context) error {
 
+	systemState, err := system.GetSystemState(
+		system.WithBackendPath(r.BackendsPath),
+		system.WithBackendSystemPath(r.BackendsSystemPath),
+	)
+	if err != nil {
+		return err
+	}
+
 	// Check if the token is set
 	// as we always need it.
 	if r.Token == "" {
@@ -38,6 +48,9 @@ func (r *P2P) Run(ctx *cliContext.Context) error {
 
 	address := "127.0.0.1"
 
+	c, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	if r.NoRunner {
 		// Let override which port and address to bind if the user
 		// configure the llama-cpp service on its own
@@ -49,7 +62,7 @@ func (r *P2P) Run(ctx *cliContext.Context) error {
 			p = r.RunnerPort
 		}
 
-		_, err = p2p.ExposeService(context.Background(), address, p, r.Token, p2p.NetworkID(r.Peer2PeerNetworkID, p2p.WorkerID))
+		_, err = p2p.ExposeService(c, address, p, r.Token, p2p.NetworkID(r.Peer2PeerNetworkID, p2p.WorkerID))
 		if err != nil {
 			return err
 		}
@@ -60,7 +73,7 @@ func (r *P2P) Run(ctx *cliContext.Context) error {
 			for {
 				log.Info().Msgf("Starting llama-cpp-rpc-server on '%s:%d'", address, port)
 
-				grpcProcess, err := findLLamaCPPBackend(r.BackendsPath)
+				grpcProcess, err := findLLamaCPPBackend(r.BackendGalleries, systemState)
 				if err != nil {
 					log.Error().Err(err).Msg("Failed to find llama-cpp-rpc-server")
 					return
@@ -91,11 +104,15 @@ func (r *P2P) Run(ctx *cliContext.Context) error {
 			}
 		}()
 
-		_, err = p2p.ExposeService(context.Background(), address, fmt.Sprint(port), r.Token, p2p.NetworkID(r.Peer2PeerNetworkID, p2p.WorkerID))
+		_, err = p2p.ExposeService(c, address, fmt.Sprint(port), r.Token, p2p.NetworkID(r.Peer2PeerNetworkID, p2p.WorkerID))
 		if err != nil {
 			return err
 		}
 	}
+
+	signals.RegisterGracefulTerminationHandler(func() {
+		cancel()
+	})
 
 	for {
 		time.Sleep(1 * time.Second)

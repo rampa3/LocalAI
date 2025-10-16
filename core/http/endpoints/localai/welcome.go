@@ -11,17 +11,28 @@ import (
 )
 
 func WelcomeEndpoint(appConfig *config.ApplicationConfig,
-	cl *config.BackendConfigLoader, ml *model.ModelLoader, opcache *services.OpCache) func(*fiber.Ctx) error {
+	cl *config.ModelConfigLoader, ml *model.ModelLoader, opcache *services.OpCache) func(*fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
-		backendConfigs := cl.GetAllBackendConfigs()
+		modelConfigs := cl.GetAllModelsConfigs()
 		galleryConfigs := map[string]*gallery.ModelConfig{}
 
-		for _, m := range backendConfigs {
+		installedBackends, err := gallery.ListSystemBackends(appConfig.SystemState)
+		if err != nil {
+			return err
+		}
+
+		for _, m := range modelConfigs {
 			cfg, err := gallery.GetLocalModelConfiguration(ml.ModelPath, m.Name)
 			if err != nil {
 				continue
 			}
 			galleryConfigs[m.Name] = cfg
+		}
+
+		loadedModels := ml.ListLoadedModels()
+		loadedModelsMap := map[string]bool{}
+		for _, m := range loadedModels {
+			loadedModelsMap[m.ID] = true
 		}
 
 		modelsWithoutConfig, _ := services.ListModels(cl, ml, config.NoFilterFn, services.LOOSE_ONLY)
@@ -34,11 +45,13 @@ func WelcomeEndpoint(appConfig *config.ApplicationConfig,
 			"Version":           internal.PrintableVersion(),
 			"BaseURL":           utils.BaseURL(c),
 			"Models":            modelsWithoutConfig,
-			"ModelsConfig":      backendConfigs,
+			"ModelsConfig":      modelConfigs,
 			"GalleryConfig":     galleryConfigs,
 			"ApplicationConfig": appConfig,
 			"ProcessingModels":  processingModels,
 			"TaskTypes":         taskTypes,
+			"LoadedModels":      loadedModelsMap,
+			"InstalledBackends": installedBackends,
 		}
 
 		if string(c.Context().Request.Header.ContentType()) == "application/json" || len(c.Accepts("html")) == 0 {

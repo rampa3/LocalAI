@@ -1,3 +1,5 @@
+// Package system provides system detection utilities, including GPU/vendor detection
+// and capability classification used to select optimal backends at runtime.
 package system
 
 import (
@@ -5,13 +7,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/mudler/LocalAI/pkg/xsysinfo"
+	"github.com/jaypipes/ghw/pkg/gpu"
 	"github.com/rs/zerolog/log"
 )
-
-type SystemState struct {
-	GPUVendor string
-}
 
 const (
 	defaultCapability = "default"
@@ -91,24 +89,16 @@ func (s *SystemState) getSystemCapabilities() string {
 	}
 
 	log.Info().Str("Capability", s.GPUVendor).Msgf("Capability automatically detected, set %s to override", capabilityEnv)
+	// If vram is less than 4GB, let's default to CPU but warn the user that they can override that via env
+	if s.VRAM <= 4*1024*1024*1024 {
+		log.Warn().Msgf("VRAM is less than 4GB, defaulting to CPU. Set %s to override", capabilityEnv)
+		return defaultCapability
+	}
+
 	return s.GPUVendor
 }
 
-func GetSystemState() (*SystemState, error) {
-	gpuVendor, _ := detectGPUVendor()
-	log.Debug().Str("gpuVendor", gpuVendor).Msg("GPU vendor")
-
-	return &SystemState{
-		GPUVendor: gpuVendor,
-	}, nil
-}
-
-func detectGPUVendor() (string, error) {
-	gpus, err := xsysinfo.GPUs()
-	if err != nil {
-		return "", err
-	}
-
+func detectGPUVendor(gpus []*gpu.GraphicsCard) (string, error) {
 	for _, gpu := range gpus {
 		if gpu.DeviceInfo != nil {
 			if gpu.DeviceInfo.Vendor != nil {
@@ -127,4 +117,26 @@ func detectGPUVendor() (string, error) {
 	}
 
 	return "", nil
+}
+
+// BackendPreferenceTokens returns a list of substrings that represent the preferred
+// backend implementation order for the current system capability. Callers can use
+// these tokens to select the most appropriate concrete backend among multiple
+// candidates sharing the same alias (e.g., "llama-cpp").
+func (s *SystemState) BackendPreferenceTokens() []string {
+	capStr := strings.ToLower(s.getSystemCapabilities())
+	switch {
+	case strings.HasPrefix(capStr, nvidia):
+		return []string{"cuda", "vulkan", "cpu"}
+	case strings.HasPrefix(capStr, amd):
+		return []string{"rocm", "hip", "vulkan", "cpu"}
+	case strings.HasPrefix(capStr, intel):
+		return []string{"sycl", "intel", "cpu"}
+	case strings.HasPrefix(capStr, metal):
+		return []string{"metal", "cpu"}
+	case strings.HasPrefix(capStr, darwinX86):
+		return []string{"darwin-x86", "cpu"}
+	default:
+		return []string{"cpu"}
+	}
 }

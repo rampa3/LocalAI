@@ -9,7 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates curl wget espeak-ng libgomp1 \
-        python3 python-is-python3 ffmpeg libopenblas-base libopenblas-dev && \
+        ffmpeg libopenblas-base libopenblas-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -78,6 +78,16 @@ RUN <<EOT bash
     fi
 EOT
 
+# https://github.com/NVIDIA/Isaac-GR00T/issues/343
+RUN <<EOT bash
+    if [ "${BUILD_TYPE}" = "cublas" ] && [ "${TARGETARCH}" = "arm64" ]; then
+        wget https://developer.download.nvidia.com/compute/cudss/0.6.0/local_installers/cudss-local-tegra-repo-ubuntu2204-0.6.0_0.6.0-1_arm64.deb && \
+        dpkg -i cudss-local-tegra-repo-ubuntu2204-0.6.0_0.6.0-1_arm64.deb && \
+        cp /var/cudss-local-tegra-repo-ubuntu2204-0.6.0/cudss-*-keyring.gpg /usr/share/keyrings/ && \
+        apt-get update && apt-get -y install cudss
+    fi
+EOT
+
 # If we are building with clblas support, we need the libraries for the builds
 RUN if [ "${BUILD_TYPE}" = "clblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then \
         apt-get update && \
@@ -98,6 +108,10 @@ RUN if [ "${BUILD_TYPE}" = "hipblas" ] && [ "${SKIP_DRIVERS}" = "false" ]; then 
         # I have no idea why, but the ROCM lib packages don't trigger ldconfig after they install, which results in local-ai and others not being able
         # to locate the libraries. We run ldconfig ourselves to work around this packaging deficiency
         ldconfig \
+    ; fi
+
+RUN if [ "${BUILD_TYPE}" = "hipblas" ]; then \
+    ln -s /opt/rocm-**/lib/llvm/lib/libomp.so /usr/lib/libomp.so \
     ; fi
 
 RUN expr "${BUILD_TYPE}" = intel && echo "intel" > /run/localai/capability || echo "not intel"

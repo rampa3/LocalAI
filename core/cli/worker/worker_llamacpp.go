@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -9,7 +10,10 @@ import (
 	"syscall"
 
 	cliContext "github.com/mudler/LocalAI/core/cli/context"
+	"github.com/mudler/LocalAI/core/config"
 	"github.com/mudler/LocalAI/core/gallery"
+	"github.com/mudler/LocalAI/pkg/model"
+	"github.com/mudler/LocalAI/pkg/system"
 	"github.com/rs/zerolog/log"
 )
 
@@ -19,23 +23,32 @@ type LLamaCPP struct {
 
 const (
 	llamaCPPRPCBinaryName = "llama-cpp-rpc-server"
+	llamaCPPGalleryName   = "llama-cpp"
 )
 
-func findLLamaCPPBackend(backendSystemPath string) (string, error) {
-	backends, err := gallery.ListSystemBackends(backendSystemPath)
+func findLLamaCPPBackend(galleries string, systemState *system.SystemState) (string, error) {
+	backends, err := gallery.ListSystemBackends(systemState)
 	if err != nil {
 		log.Warn().Msgf("Failed listing system backends: %s", err)
 		return "", err
 	}
 	log.Debug().Msgf("System backends: %v", backends)
 
-	backendPath := ""
-	for b, path := range backends {
-		if b == "llama-cpp" {
-			backendPath = filepath.Dir(path)
-			break
+	backend, ok := backends.Get(llamaCPPGalleryName)
+	if !ok {
+		ml := model.NewModelLoader(systemState, true)
+		var gals []config.Gallery
+		if err := json.Unmarshal([]byte(galleries), &gals); err != nil {
+			log.Error().Err(err).Msg("failed loading galleries")
+			return "", err
+		}
+		err := gallery.InstallBackendFromGallery(gals, systemState, ml, llamaCPPGalleryName, nil, true)
+		if err != nil {
+			log.Error().Err(err).Msg("llama-cpp backend not found, failed to install it")
+			return "", err
 		}
 	}
+	backendPath := filepath.Dir(backend.RunFile)
 
 	if backendPath == "" {
 		return "", errors.New("llama-cpp backend not found, install it first")
@@ -55,7 +68,14 @@ func (r *LLamaCPP) Run(ctx *cliContext.Context) error {
 		return fmt.Errorf("usage: local-ai worker llama-cpp-rpc -- <llama-rpc-server-args>")
 	}
 
-	grpcProcess, err := findLLamaCPPBackend(r.BackendsPath)
+	systemState, err := system.GetSystemState(
+		system.WithBackendPath(r.BackendsPath),
+		system.WithBackendSystemPath(r.BackendsSystemPath),
+	)
+	if err != nil {
+		return err
+	}
+	grpcProcess, err := findLLamaCPPBackend(r.BackendGalleries, systemState)
 	if err != nil {
 		return err
 	}
@@ -63,6 +83,7 @@ func (r *LLamaCPP) Run(ctx *cliContext.Context) error {
 	args := strings.Split(r.ExtraLLamaCPPArgs, " ")
 
 	args = append([]string{grpcProcess}, args...)
+
 	return syscall.Exec(
 		grpcProcess,
 		args,

@@ -53,9 +53,9 @@ static void start_llama_server(server_context& ctx_server) {
     LOG_INF("%s: model loaded\n", __func__);
 
     // print sample chat example to make it clear which template is used
-    LOG_INF("%s: chat template, chat_template: %s, example_format: '%s'\n", __func__,
-        common_chat_templates_source(ctx_server.chat_templates.get()),
-        common_chat_format_example(ctx_server.chat_templates.get(), ctx_server.params_base.use_jinja).c_str());
+    // LOG_INF("%s: chat template, chat_template: %s, example_format: '%s'\n", __func__,
+    //     common_chat_templates_source(ctx_server.chat_templates.get()),
+    //     common_chat_format_example(ctx_server.chat_templates.get(), ctx_server.params_base.use_jinja).c_str(), ctx_server.params_base.default_template_kwargs);
 
     // Reset the chat templates
     // TODO: We should make this configurable by respecting the option that is already present in LocalAI for vLLM
@@ -92,7 +92,7 @@ static void start_llama_server(server_context& ctx_server) {
     ctx_server.queue_tasks.start_loop();
 }
 
-json parse_options(bool streaming, const backend::PredictOptions* predict)
+json parse_options(bool streaming, const backend::PredictOptions* predict, const server_context& ctx_server)
 {
     
     // Create now a json data from the prediction options instead
@@ -146,6 +146,28 @@ json parse_options(bool streaming, const backend::PredictOptions* predict)
     data["stop"] = predict->stopprompts();
     // data["n_probs"] = predict->nprobs();
     //TODO: images,
+
+    // Serialize grammar triggers from server context to JSON array
+    if (!ctx_server.params_base.sampling.grammar_triggers.empty()) {
+        json grammar_triggers = json::array();
+        for (const auto& trigger : ctx_server.params_base.sampling.grammar_triggers) {
+            json trigger_json;
+            trigger_json["value"] = trigger.value;
+            // Always serialize as WORD type since upstream converts WORD to TOKEN internally
+            trigger_json["type"] = static_cast<int>(COMMON_GRAMMAR_TRIGGER_TYPE_WORD);
+            grammar_triggers.push_back(trigger_json);
+        }
+        data["grammar_triggers"] = grammar_triggers;
+    }
+
+    // Serialize preserved tokens from server context to JSON array
+    if (!ctx_server.params_base.sampling.preserved_tokens.empty()) {
+        json preserved_tokens = json::array();
+        for (const auto& token : ctx_server.params_base.sampling.preserved_tokens) {
+            preserved_tokens.push_back(common_token_to_piece(ctx_server.ctx, token));
+        }
+        data["preserved_tokens"] = preserved_tokens;
+    }
 
     return data;
 }
@@ -207,7 +229,7 @@ static void add_rpc_devices(std::string servers) {
     }
 }
 
-static void params_parse(const backend::ModelOptions* request,
+static void params_parse(server_context& ctx_server, const backend::ModelOptions* request,
                                 common_params & params) {
    
     // this is comparable to: https://github.com/ggerganov/llama.cpp/blob/d9b33fe95bd257b36c84ee5769cc048230067d6f/examples/server/server.cpp#L1809
@@ -231,6 +253,7 @@ static void params_parse(const backend::ModelOptions* request,
     params.cpuparams.n_threads = request->threads();
     params.n_gpu_layers = request->ngpulayers();
     params.n_batch = request->nbatch();
+    params.n_ubatch = request->nbatch(); // fixes issue with reranking models being limited to 512 tokens (the default n_ubatch size); allows for setting the maximum input amount of tokens thereby avoiding this error "input is too large to process. increase the physical batch size"
     // Set params.n_parallel by environment variable (LLAMA_PARALLEL), defaults to 1
     //params.n_parallel = 1;
     const char *env_parallel = std::getenv("LLAMACPP_PARALLEL");
@@ -304,7 +327,15 @@ static void params_parse(const backend::ModelOptions* request,
     }
     params.use_mlock = request->mlock();
     params.use_mmap = request->mmap();
-    params.flash_attn = request->flashattention();
+
+    if (request->flashattention() == "on" || request->flashattention() == "enabled") {
+        params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED;
+    } else if (request->flashattention() == "off" || request->flashattention() == "disabled") {
+        params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_DISABLED;
+    } else if (request->flashattention() == "auto") {
+        params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_AUTO;
+    }
+
     params.no_kv_offload = request->nokvoffload();
     params.ctx_shift = false; // We control context-shifting in any case (and we disable it as it could just lead to infinite loops)
 
@@ -338,14 +369,14 @@ static void params_parse(const backend::ModelOptions* request,
     }
 
     if (request->grammartriggers_size() > 0) {
-        params.sampling.grammar_lazy = true;
+        //params.sampling.grammar_lazy = true;
+        // Store grammar trigger words for processing after model is loaded
         for (int i = 0; i < request->grammartriggers_size(); i++) {
+            const auto & word = request->grammartriggers(i).word();
             common_grammar_trigger trigger;
-	    trigger.type = COMMON_GRAMMAR_TRIGGER_TYPE_WORD;
-            trigger.value = request->grammartriggers(i).word();
-	    // trigger.at_start = request->grammartriggers(i).at_start();
-            params.sampling.grammar_triggers.push_back(trigger);
-           
+            trigger.type = COMMON_GRAMMAR_TRIGGER_TYPE_WORD;
+            trigger.value = word;
+            params.sampling.grammar_triggers.push_back(std::move(trigger));
         }
     }
 }
@@ -368,7 +399,7 @@ public:
     grpc::Status LoadModel(ServerContext* context, const backend::ModelOptions* request, backend::Result* result) {
         // Implement LoadModel RPC
         common_params params;
-        params_parse(request, params);
+        params_parse(ctx_server, request, params);
 
         common_init();
 
@@ -387,6 +418,39 @@ public:
             return Status::CANCELLED;
         }
 
+        // Process grammar triggers now that vocab is available
+        if (!params.sampling.grammar_triggers.empty()) {
+            std::vector<common_grammar_trigger> processed_triggers;
+            for (const auto& trigger : params.sampling.grammar_triggers) {
+                if (trigger.type == COMMON_GRAMMAR_TRIGGER_TYPE_WORD) {
+                    auto ids = common_tokenize(ctx_server.vocab, trigger.value, /* add_special= */ false, /* parse_special= */ true);
+                    if (ids.size() == 1) {
+                        auto token = ids[0];
+                        // Add the token to preserved_tokens if not already present
+                        if (params.sampling.preserved_tokens.find(token) == params.sampling.preserved_tokens.end()) {
+                            params.sampling.preserved_tokens.insert(token);
+                            LOG_INF("Added grammar trigger token to preserved tokens: %d (`%s`)\n", token, trigger.value.c_str());
+                        }
+                        LOG_INF("Grammar trigger token: %d (`%s`)\n", token, trigger.value.c_str());
+                        common_grammar_trigger processed_trigger;
+                        processed_trigger.type = COMMON_GRAMMAR_TRIGGER_TYPE_TOKEN;
+                        processed_trigger.value = trigger.value;
+                        processed_trigger.token = token;
+                        processed_triggers.push_back(std::move(processed_trigger));
+                    } else {
+                        LOG_INF("Grammar trigger word: `%s`\n", trigger.value.c_str());
+                        processed_triggers.push_back(trigger);
+                    }
+                } else {
+                    processed_triggers.push_back(trigger);
+                }
+            }
+            // Update the grammar triggers in params_base
+            ctx_server.params_base.sampling.grammar_triggers = std::move(processed_triggers);
+            // Also update preserved_tokens in params_base
+            ctx_server.params_base.sampling.preserved_tokens = params.sampling.preserved_tokens;
+        }
+
         //ctx_server.init();
         result->set_message("Loading succeeded");
         result->set_success(true);
@@ -397,7 +461,7 @@ public:
     }
 
     grpc::Status PredictStream(grpc::ServerContext* context, const backend::PredictOptions* request, grpc::ServerWriter<backend::Reply>* writer) override {
-        json data = parse_options(true, request);
+        json data = parse_options(true, request, ctx_server);
 
 
         //Raise error if embeddings is set to true
@@ -437,24 +501,7 @@ public:
                 }
             }
 
-            // process files
-            mtmd::bitmaps bitmaps;
             const bool has_mtmd = ctx_server.mctx != nullptr;
-            {
-                if (!has_mtmd && !files.empty()) {
-                    throw std::runtime_error("This server does not support multimodal");
-                }
-                for (auto & file : files) {
-                    mtmd::bitmap bmp(mtmd_helper_bitmap_init_from_buf(ctx_server.mctx, file.data(), file.size()));
-                    if (!bmp.ptr) {
-                        throw std::runtime_error("Failed to load image/audio");
-                    }
-                    // calculate bitmap hash (for KV caching)
-                    std::string hash = fnv_hash(bmp.data(), bmp.n_bytes());
-                    bmp.set_id(hash.c_str());
-                    bitmaps.entries.push_back(std::move(bmp));
-                }
-            }
 
             // process prompt
             std::vector<server_tokens> inputs;
@@ -464,32 +511,10 @@ public:
 
             if (has_mtmd) {
                 // multimodal
-                std::string prompt_str = prompt.get<std::string>();
-                mtmd_input_text inp_txt = {
-                    prompt_str.c_str(),
-                    /* add_special */   true,
-                    /* parse_special */ true,
-                };
-                mtmd::input_chunks chunks(mtmd_input_chunks_init());
-                auto bitmaps_c_ptr = bitmaps.c_ptr();
-                int32_t tokenized = mtmd_tokenize(ctx_server.mctx,
-                                                    chunks.ptr.get(),
-                                                    &inp_txt,
-                                                    bitmaps_c_ptr.data(),
-                                                    bitmaps_c_ptr.size());
-                if (tokenized != 0) {
-                    throw std::runtime_error("Failed to tokenize prompt");
-                }
-
-                server_tokens tmp(chunks, true);
-                inputs.push_back(std::move(tmp));
+                inputs.push_back(process_mtmd_prompt(ctx_server.mctx, prompt.get<std::string>(), files));
             } else {
-                // non-multimodal version
-                auto tokenized_prompts = tokenize_input_prompts(ctx_server.vocab, prompt, true, true);
-                for (auto & p : tokenized_prompts) {
-                    auto tmp = server_tokens(p, ctx_server.mctx != nullptr);
-                    inputs.push_back(std::move(tmp));
-                }
+                 // Everything else, including multimodal completions.
+                inputs = tokenize_input_prompts(ctx_server.vocab, ctx_server.mctx, prompt, true, true);
             }
 
             tasks.reserve(inputs.size());
@@ -499,12 +524,12 @@ public:
                 task.id    = ctx_server.queue_tasks.get_new_id();
                 task.index = i;
 
-                task.prompt_tokens    = std::move(inputs[i]);
+                task.tokens    = std::move(inputs[i]);
                 task.params           = server_task::params_from_json_cmpl(
                         ctx_server.ctx,
                         ctx_server.params_base,
                         data);
-                task.id_selected_slot = json_value(data, "id_slot", -1);
+                task.id_slot = json_value(data, "id_slot", -1);
 
                 // OAI-compat
                 task.params.oaicompat                 = OAICOMPAT_TYPE_NONE;
@@ -586,7 +611,7 @@ public:
     }
 
     grpc::Status Predict(ServerContext* context, const backend::PredictOptions* request, backend::Reply* reply) {
-         json data = parse_options(true, request);
+         json data = parse_options(true, request, ctx_server);
 
         data["stream"] = false;
         //Raise error if embeddings is set to true
@@ -630,23 +655,7 @@ public:
             }
 
             // process files
-            mtmd::bitmaps bitmaps;
             const bool has_mtmd = ctx_server.mctx != nullptr;
-            {
-                if (!has_mtmd && !files.empty()) {
-                    throw std::runtime_error("This server does not support multimodal");
-                }
-                for (auto & file : files) {
-                    mtmd::bitmap bmp(mtmd_helper_bitmap_init_from_buf(ctx_server.mctx, file.data(), file.size()));
-                    if (!bmp.ptr) {
-                        throw std::runtime_error("Failed to load image/audio");
-                    }
-                    // calculate bitmap hash (for KV caching)
-                    std::string hash = fnv_hash(bmp.data(), bmp.n_bytes());
-                    bmp.set_id(hash.c_str());
-                    bitmaps.entries.push_back(std::move(bmp));
-                }
-            }
 
             // process prompt
             std::vector<server_tokens> inputs;
@@ -657,33 +666,10 @@ public:
 
             if (has_mtmd) {
                 // multimodal
-                std::string prompt_str = prompt.get<std::string>();
-                mtmd_input_text inp_txt = {
-                    prompt_str.c_str(),
-                    /* add_special */   true,
-                    /* parse_special */ true,
-                };
-                mtmd::input_chunks chunks(mtmd_input_chunks_init());
-                auto bitmaps_c_ptr = bitmaps.c_ptr();
-                int32_t tokenized = mtmd_tokenize(ctx_server.mctx,
-                                                    chunks.ptr.get(),
-                                                    &inp_txt,
-                                                    bitmaps_c_ptr.data(),
-                                                    bitmaps_c_ptr.size());
-                if (tokenized != 0) {
-                    std::cout << "[PREDICT] Failed to tokenize prompt" << std::endl;
-                    throw std::runtime_error("Failed to tokenize prompt");
-                }
-
-                server_tokens tmp(chunks, true);
-                inputs.push_back(std::move(tmp));
+                inputs.push_back(process_mtmd_prompt(ctx_server.mctx, prompt.get<std::string>(), files));
             } else {
-                // non-multimodal version
-                auto tokenized_prompts = tokenize_input_prompts(ctx_server.vocab, prompt, true, true);
-                for (auto & p : tokenized_prompts) {
-                    auto tmp = server_tokens(p, ctx_server.mctx != nullptr);
-                    inputs.push_back(std::move(tmp));
-                }
+                 // Everything else, including multimodal completions.
+                inputs = tokenize_input_prompts(ctx_server.vocab, ctx_server.mctx, prompt, true, true);
             }
 
             tasks.reserve(inputs.size());
@@ -693,12 +679,12 @@ public:
                 task.id    = ctx_server.queue_tasks.get_new_id();
                 task.index = i;
 
-                task.prompt_tokens    = std::move(inputs[i]);
+                task.tokens    = std::move(inputs[i]);
                 task.params           = server_task::params_from_json_cmpl(
                         ctx_server.ctx,
                         ctx_server.params_base,
                         data);
-                task.id_selected_slot = json_value(data, "id_slot", -1);
+                task.id_slot = json_value(data, "id_slot", -1);
 
                 // OAI-compat
                 task.params.oaicompat                 = OAICOMPAT_TYPE_NONE;
@@ -760,7 +746,7 @@ public:
 
     grpc::Status Embedding(ServerContext* context, const backend::PredictOptions* request, backend::EmbeddingResult* embeddingResult) {
 
-        json body = parse_options(false, request);
+        json body = parse_options(false, request, ctx_server);
 
         body["stream"] = false;
 
@@ -771,10 +757,10 @@ public:
         */
 
         // for the shape of input/content, see tokenize_input_prompts()
-        json prompt = body.at("prompt");
+        json prompt = body.at("embeddings");
 
 
-        auto tokenized_prompts = tokenize_input_prompts(ctx_server.vocab, prompt, true, true);
+        auto tokenized_prompts = tokenize_input_prompts(ctx_server.vocab, ctx_server.mctx, prompt, true, true);
         for (const auto & tokens : tokenized_prompts) {
             // this check is necessary for models that do not add BOS token to the input
             if (tokens.empty()) {
@@ -782,6 +768,7 @@ public:
             }
         }
 
+        int embd_normalize = 2; // default to Euclidean/L2 norm
         // create and queue the task
         json responses = json::array();
         bool error = false;
@@ -793,11 +780,10 @@ public:
 
                 task.id            = ctx_server.queue_tasks.get_new_id();
                 task.index         = i;
-                task.prompt_tokens = server_tokens(tokenized_prompts[i], ctx_server.mctx != nullptr);
+                task.tokens = std::move(tokenized_prompts[i]);
 
-                // OAI-compat
-                task.params.oaicompat = OAICOMPAT_TYPE_EMBEDDING;
-
+                task.params.oaicompat = OAICOMPAT_TYPE_NONE;
+                task.params.embd_normalize = embd_normalize;
                 tasks.push_back(std::move(task));
             }
 
@@ -813,9 +799,8 @@ public:
                 responses.push_back(res->to_json());
             }
         }, [&](const json & error_data) {
-            return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, error_data.value("content", ""));
+            error = true;
         }, [&]() {
-            // NOTE: we should try to check when the writer is closed here
             return false;
         });
 
@@ -825,11 +810,35 @@ public:
             return grpc::Status(grpc::StatusCode::INTERNAL, "Error in receiving results");
         }
 
-        std::vector<float> embeddings = responses[0].value("embedding", std::vector<float>());
-        // loop the vector and set the embeddings results
-        for (int i = 0; i < embeddings.size(); i++) {
-            embeddingResult->add_embeddings(embeddings[i]);
+        std::cout << "[DEBUG] Responses size: " << responses.size() << std::endl;
+        
+        // Process the responses and extract embeddings
+        for (const auto & response_elem : responses) {
+            // Check if the response has an "embedding" field
+            if (response_elem.contains("embedding")) {
+                json embedding_data = json_value(response_elem, "embedding", json::array());
+                
+                if (embedding_data.is_array() && !embedding_data.empty()) {
+                    for (const auto & embedding_vector : embedding_data) {
+                        if (embedding_vector.is_array()) {
+                            for (const auto & embedding_value : embedding_vector) {
+                                embeddingResult->add_embeddings(embedding_value.get<float>());
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Check if the response itself contains the embedding data directly
+                if (response_elem.is_array()) {
+                    for (const auto & embedding_value : response_elem) {
+                        embeddingResult->add_embeddings(embedding_value.get<float>());
+                    }
+                }
+            }
         }
+
+
+    
 
         return grpc::Status::OK;
     }
@@ -848,9 +857,6 @@ public:
             return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "\"documents\" must be a non-empty string array");
         }
 
-        // Tokenize the query
-        llama_tokens tokenized_query = tokenize_input_prompts(ctx_server.vocab, request->query(), /* add_special */ false, true)[0];
-
         // Create and queue the task
         json responses = json::array();
         bool error = false;
@@ -862,14 +868,13 @@ public:
                 documents.push_back(request->documents(i));
             }
             
-            auto tokenized_docs = tokenize_input_prompts(ctx_server.vocab, documents, /* add_special */ false, true);
-            tasks.reserve(tokenized_docs.size());
-            for (size_t i = 0; i < tokenized_docs.size(); i++) {
-                auto tmp = format_rerank(ctx_server.vocab, tokenized_query, tokenized_docs[i]);
+            tasks.reserve(documents.size());
+            for (size_t i = 0; i < documents.size(); i++) {
+                auto tmp = format_rerank(ctx_server.model, ctx_server.vocab, ctx_server.mctx, request->query(), documents[i]);
                 server_task task = server_task(SERVER_TASK_TYPE_RERANK);
                 task.id = ctx_server.queue_tasks.get_new_id();
                 task.index = i;
-                task.prompt_tokens = server_tokens(tmp, ctx_server.mctx != nullptr);
+                task.tokens = std::move(tmp);
                 tasks.push_back(std::move(task));
             }
 
@@ -922,7 +927,7 @@ public:
     }
 
     grpc::Status TokenizeString(ServerContext* context, const backend::PredictOptions* request, backend::TokenizationResponse* response) {
-        json body = parse_options(false, request);
+        json body = parse_options(false, request, ctx_server);
         body["stream"] = false;
         
         json tokens_response = json::array();

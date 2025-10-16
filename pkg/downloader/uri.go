@@ -37,6 +37,17 @@ const (
 
 type URI string
 
+// HF_ENDPOINT is the HuggingFace endpoint, can be overridden by setting the HF_ENDPOINT environment variable.
+var HF_ENDPOINT string = loadConfig()
+
+func loadConfig() string {
+	HF_ENDPOINT := os.Getenv("HF_ENDPOINT")
+	if HF_ENDPOINT == "" {
+		HF_ENDPOINT = "https://huggingface.co"
+	}
+	return HF_ENDPOINT
+}
+
 func (uri URI) DownloadWithCallback(basePath string, f func(url string, i []byte) error) error {
 	return uri.DownloadWithAuthorizationAndCallback(basePath, "", f)
 }
@@ -98,19 +109,19 @@ func (uri URI) DownloadWithAuthorizationAndCallback(basePath string, authorizati
 }
 
 func (u URI) FilenameFromUrl() (string, error) {
-	f, err := filenameFromUrl(string(u))
-	if err != nil || f == "" {
-		f = utils.MD5(string(u))
-		if strings.HasSuffix(string(u), ".yaml") || strings.HasSuffix(string(u), ".yml") {
-			f = f + ".yaml"
-		}
-		err = nil
+	if f := filenameFromUrl(string(u)); f != "" {
+		return f, nil
 	}
 
-	return f, err
+	f := utils.MD5(string(u))
+	if strings.HasSuffix(string(u), ".yaml") || strings.HasSuffix(string(u), ".yml") {
+		f = f + ".yaml"
+	}
+
+	return f, nil
 }
 
-func filenameFromUrl(urlstr string) (string, error) {
+func filenameFromUrl(urlstr string) string {
 	// strip anything after @
 	if strings.Contains(urlstr, "@") {
 		urlstr = strings.Split(urlstr, "@")[0]
@@ -118,13 +129,13 @@ func filenameFromUrl(urlstr string) (string, error) {
 
 	u, err := url.Parse(urlstr)
 	if err != nil {
-		return "", fmt.Errorf("error due to parsing url: %w", err)
+		return ""
 	}
 	x, err := url.QueryUnescape(u.EscapedPath())
 	if err != nil {
-		return "", fmt.Errorf("error due to escaping: %w", err)
+		return ""
 	}
-	return filepath.Base(x), nil
+	return filepath.Base(x)
 }
 
 func (u URI) LooksLikeURL() bool {
@@ -156,6 +167,10 @@ func (s URI) LooksLikeOCI() bool {
 		strings.HasPrefix(string(s), OCIFilePrefix) ||
 		strings.HasPrefix(string(s), "ghcr.io") ||
 		strings.HasPrefix(string(s), "docker.io")
+}
+
+func (s URI) LooksLikeOCIFile() bool {
+	return strings.HasPrefix(string(s), OCIFilePrefix)
 }
 
 func (s URI) ResolveURL() string {
@@ -209,7 +224,7 @@ func (s URI) ResolveURL() string {
 			filepath = strings.Split(filepath, "@")[0]
 		}
 
-		return fmt.Sprintf("https://huggingface.co/%s/%s/resolve/%s/%s", owner, repo, branch, filepath)
+		return fmt.Sprintf("%s/%s/%s/resolve/%s/%s", HF_ENDPOINT, owner, repo, branch, filepath)
 	}
 
 	return string(s)

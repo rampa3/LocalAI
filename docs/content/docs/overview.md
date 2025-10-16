@@ -30,6 +30,7 @@ LocalAI is more than just a single tool - it's a complete ecosystem:
 1. **[LocalAI Core](https://github.com/mudler/LocalAI)**
    - OpenAI-compatible API
    - Multiple model support (LLMs, image, audio)
+   - Model Context Protocol (MCP) for agentic capabilities
    - No GPU required
    - Fast inference with native bindings
    - [Github repository](https://github.com/mudler/LocalAI)
@@ -56,6 +57,12 @@ The fastest way to get started is with our one-line installer:
 curl https://localai.io/install.sh | sh
 ```
 
+### macOS Download
+
+<a href="https://github.com/mudler/LocalAI/releases/latest/download/LocalAI.dmg">
+  <img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download LocalAI for macOS"/>
+</a>
+
 Or use Docker for a quick start:
 
 ```bash
@@ -72,6 +79,7 @@ For more detailed installation options and configurations, see our [Getting Star
 - **Vision API**: Image understanding and analysis
 - **Embeddings**: Vector database support
 - **Functions**: OpenAI-compatible function calling
+- **MCP Support**: Model Context Protocol for agentic capabilities
 - **P2P**: Distributed inference capabilities
 
 ## Community and Support

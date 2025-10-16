@@ -43,7 +43,7 @@
 
 > :bulb: Get help - [❓FAQ](https://localai.io/faq/) [💭Discussions](https://github.com/go-skynet/LocalAI/discussions) [:speech_balloon: Discord](https://discord.gg/uJAeKSAGDy) [:book: Documentation website](https://localai.io/)
 >
-> [💻 Quickstart](https://localai.io/basics/getting_started/) [🖼️ Models](https://models.localai.io/) [🚀 Roadmap](https://github.com/mudler/LocalAI/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap) [🥽 Demo](https://demo.localai.io) [🌍 Explorer](https://explorer.localai.io) [🛫 Examples](https://github.com/mudler/LocalAI-examples) Try on 
+> [💻 Quickstart](https://localai.io/basics/getting_started/) [🖼️ Models](https://models.localai.io/) [🚀 Roadmap](https://github.com/mudler/LocalAI/issues?q=is%3Aissue+is%3Aopen+label%3Aroadmap) [🌍 Explorer](https://explorer.localai.io) [🛫 Examples](https://github.com/mudler/LocalAI-examples) Try on 
 [![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/localaiofficial_bot)
 
 [![tests](https://github.com/go-skynet/LocalAI/actions/workflows/test.yml/badge.svg)](https://github.com/go-skynet/LocalAI/actions/workflows/test.yml)[![Build and Release](https://github.com/go-skynet/LocalAI/actions/workflows/release.yaml/badge.svg)](https://github.com/go-skynet/LocalAI/actions/workflows/release.yaml)[![build container images](https://github.com/go-skynet/LocalAI/actions/workflows/image.yml/badge.svg)](https://github.com/go-skynet/LocalAI/actions/workflows/image.yml)[![Bump dependencies](https://github.com/go-skynet/LocalAI/actions/workflows/bump_deps.yaml/badge.svg)](https://github.com/go-skynet/LocalAI/actions/workflows/bump_deps.yaml)[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/localai)](https://artifacthub.io/packages/search?repo=localai)
@@ -110,7 +110,20 @@ curl https://localai.io/install.sh | sh
 
 For more installation options, see [Installer Options](https://localai.io/docs/advanced/installer/).
 
+### macOS Download:
+
+<a href="https://github.com/mudler/LocalAI/releases/latest/download/LocalAI.dmg">
+  <img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download LocalAI for macOS"/>
+</a>
+
 Or run with docker:
+
+> **💡 Docker Run vs Docker Start**
+> 
+> - `docker run` creates and starts a new container. If a container with the same name already exists, this command will fail.
+> - `docker start` starts an existing container that was previously created with `docker run`.
+> 
+> If you've already run LocalAI before and want to start it again, use: `docker start -i local-ai`
 
 ### CPU only image:
 
@@ -191,6 +204,9 @@ For more information, see [💻 Getting started](https://localai.io/basics/getti
 
 ## 📰 Latest project news
 
+- October 2025: 🔌 [Model Context Protocol (MCP)](https://localai.io/docs/features/mcp/) support added for agentic capabilities with external tools
+- September 2025: New Launcher application for MacOS and Linux, extended support to many backends for Mac and Nvidia L4T devices. Models: Added MLX-Audio, WAN 2.2. WebUI improvements and Python-based backends now ships portable python environments.
+- August 2025: MLX, MLX-VLM, Diffusers and llama.cpp are now supported on Mac M1/M2/M3+ chips ( with `development` suffix in the gallery ): https://github.com/mudler/LocalAI/pull/6049 https://github.com/mudler/LocalAI/pull/6119 https://github.com/mudler/LocalAI/pull/6121 https://github.com/mudler/LocalAI/pull/6060
 - July/August 2025: 🔍 [Object Detection](https://localai.io/features/object-detection/) added to the API featuring [rf-detr](https://github.com/roboflow/rf-detr)
 - July 2025: All backends migrated outside of the main binary. LocalAI is now more lightweight, small, and automatically downloads the required backend to run the model. [Read the release notes](https://github.com/mudler/LocalAI/releases/tag/v3.2.0)
 - June 2025: [Backend management](https://github.com/mudler/LocalAI/pull/5607) has been added. Attention: extras images are going to be deprecated from the next release! Read [the backend management PR](https://github.com/mudler/LocalAI/pull/5607).
@@ -228,10 +244,66 @@ Roadmap items: [List of issues](https://github.com/mudler/LocalAI/issues?q=is%3A
 - 🔍 [Object Detection](https://localai.io/features/object-detection/)
 - 📈 [Reranker API](https://localai.io/features/reranker/)
 - 🆕🖧 [P2P Inferencing](https://localai.io/features/distribute/)
+- 🆕🔌 [Model Context Protocol (MCP)](https://localai.io/features/mcp/) - Agentic capabilities with external tools
 - [Agentic capabilities](https://github.com/mudler/LocalAGI)
 - 🔊 Voice activity detection (Silero-VAD support)
 - 🌍 Integrated WebUI!
 
+## 🧩 Supported Backends & Acceleration
+
+LocalAI supports a comprehensive range of AI backends with multiple acceleration options:
+
+### Text Generation & Language Models
+| Backend | Description | Acceleration Support |
+|---------|-------------|---------------------|
+| **llama.cpp** | LLM inference in C/C++ | CUDA 11/12, ROCm, Intel SYCL, Vulkan, Metal, CPU |
+| **vLLM** | Fast LLM inference with PagedAttention | CUDA 12, ROCm, Intel |
+| **transformers** | HuggingFace transformers framework | CUDA 11/12, ROCm, Intel, CPU |
+| **exllama2** | GPTQ inference library | CUDA 12 |
+| **MLX** | Apple Silicon LLM inference | Metal (M1/M2/M3+) |
+| **MLX-VLM** | Apple Silicon Vision-Language Models | Metal (M1/M2/M3+) |
+
+### Audio & Speech Processing
+| Backend | Description | Acceleration Support |
+|---------|-------------|---------------------|
+| **whisper.cpp** | OpenAI Whisper in C/C++ | CUDA 12, ROCm, Intel SYCL, Vulkan, CPU |
+| **faster-whisper** | Fast Whisper with CTranslate2 | CUDA 12, ROCm, Intel, CPU |
+| **bark** | Text-to-audio generation | CUDA 12, ROCm, Intel |
+| **bark-cpp** | C++ implementation of Bark | CUDA, Metal, CPU |
+| **coqui** | Advanced TTS with 1100+ languages | CUDA 12, ROCm, Intel, CPU |
+| **kokoro** | Lightweight TTS model | CUDA 12, ROCm, Intel, CPU |
+| **chatterbox** | Production-grade TTS | CUDA 11/12, CPU |
+| **piper** | Fast neural TTS system | CPU |
+| **kitten-tts** | Kitten TTS models | CPU |
+| **silero-vad** | Voice Activity Detection | CPU |
+| **neutts** | Text-to-speech with voice cloning | CUDA 12, ROCm, CPU |
+
+### Image & Video Generation
+| Backend | Description | Acceleration Support |
+|---------|-------------|---------------------|
+| **stablediffusion.cpp** | Stable Diffusion in C/C++ | CUDA 12, Intel SYCL, Vulkan, CPU |
+| **diffusers** | HuggingFace diffusion models | CUDA 11/12, ROCm, Intel, Metal, CPU |
+
+### Specialized AI Tasks
+| Backend | Description | Acceleration Support |
+|---------|-------------|---------------------|
+| **rfdetr** | Real-time object detection | CUDA 12, Intel, CPU |
+| **rerankers** | Document reranking API | CUDA 11/12, ROCm, Intel, CPU |
+| **local-store** | Vector database | CPU |
+| **huggingface** | HuggingFace API integration | API-based |
+
+### Hardware Acceleration Matrix
+
+| Acceleration Type | Supported Backends | Hardware Support |
+|-------------------|-------------------|------------------|
+| **NVIDIA CUDA 11** | llama.cpp, whisper, stablediffusion, diffusers, rerankers, bark, chatterbox | Nvidia hardware |
+| **NVIDIA CUDA 12** | All CUDA-compatible backends | Nvidia hardware |
+| **AMD ROCm** | llama.cpp, whisper, vllm, transformers, diffusers, rerankers, coqui, kokoro, bark, neutts | AMD Graphics |
+| **Intel oneAPI** | llama.cpp, whisper, stablediffusion, vllm, transformers, diffusers, rfdetr, rerankers, exllama2, coqui, kokoro, bark | Intel Arc, Intel iGPUs |
+| **Apple Metal** | llama.cpp, whisper, diffusers, MLX, MLX-VLM, bark-cpp | Apple M1/M2/M3+ |
+| **Vulkan** | llama.cpp, whisper, stablediffusion | Cross-platform GPUs |
+| **NVIDIA Jetson** | llama.cpp, whisper, stablediffusion, diffusers, rfdetr | ARM64 embedded AI |
+| **CPU Optimized** | All backends | AVX/AVX2/AVX512, quantization support |
 
 ### 🔗 Community and integrations
 
@@ -243,8 +315,17 @@ WebUIs:
 - https://github.com/go-skynet/LocalAI-frontend
 - QA-Pilot(An interactive chat project that leverages LocalAI LLMs for rapid understanding and navigation of GitHub code repository) https://github.com/reid41/QA-Pilot
 
+Agentic Libraries:
+- https://github.com/mudler/cogito
+
+MCPs:
+- https://github.com/mudler/MCPs
+
 Model galleries
 - https://github.com/go-skynet/model-gallery
+
+Voice:
+- https://github.com/richiejp/VoxInput
 
 Other:
 - Helm chart https://github.com/go-skynet/helm-charts

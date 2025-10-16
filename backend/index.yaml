@@ -45,6 +45,7 @@
     default: "cpu-whisper"
     nvidia: "cuda12-whisper"
     intel: "intel-sycl-f16-whisper"
+    metal: "metal-whisper"
     amd: "rocm-whisper"
     vulkan: "vulkan-whisper"
     nvidia-l4t: "nvidia-l4t-arm64-whisper"
@@ -71,7 +72,7 @@
     # amd: "rocm-stablediffusion-ggml"
     vulkan: "vulkan-stablediffusion-ggml"
     nvidia-l4t: "nvidia-l4t-arm64-stablediffusion-ggml"
-    # metal: "metal-stablediffusion-ggml"
+    metal: "metal-stablediffusion-ggml"
     # darwin-x86: "darwin-x86-stablediffusion-ggml"
 - &rfdetr
   name: "rfdetr"
@@ -127,6 +128,55 @@
     nvidia: "cuda12-vllm"
     amd: "rocm-vllm"
     intel: "intel-vllm"
+- &mlx
+  name: "mlx"
+  uri: "quay.io/go-skynet/local-ai-backends:latest-metal-darwin-arm64-mlx"
+  icon: https://avatars.githubusercontent.com/u/102832242?s=200&v=4
+  urls:
+    - https://github.com/ml-explore/mlx-lm
+  mirrors:
+    - localai/localai-backends:latest-metal-darwin-arm64-mlx
+  license: MIT
+  description: |
+      Run LLMs with MLX
+  tags:
+    - text-to-text
+    - LLM
+    - MLX
+- &mlx-vlm
+  name: "mlx-vlm"
+  uri: "quay.io/go-skynet/local-ai-backends:latest-metal-darwin-arm64-mlx-vlm"
+  icon: https://avatars.githubusercontent.com/u/102832242?s=200&v=4
+  urls:
+    - https://github.com/Blaizzy/mlx-vlm
+  mirrors:
+    - localai/localai-backends:latest-metal-darwin-arm64-mlx-vlm
+  license: MIT
+  description: |
+      Run Vision-Language Models with MLX
+  tags:
+    - text-to-text
+    - multimodal
+    - vision-language
+    - LLM
+    - MLX
+- &mlx-audio
+  name: "mlx-audio"
+  uri: "quay.io/go-skynet/local-ai-backends:latest-metal-darwin-arm64-mlx-audio"
+  icon: https://avatars.githubusercontent.com/u/102832242?s=200&v=4
+  urls:
+    - https://github.com/Blaizzy/mlx-audio
+  mirrors:
+    - localai/localai-backends:latest-metal-darwin-arm64-mlx-audio
+  license: MIT
+  description: |
+      Run Audio Models with MLX
+  tags:
+    - audio-to-text
+    - audio-generation
+    - text-to-audio
+    - LLM
+    - MLX
 - &rerankers
   name: "rerankers"
   alias: "rerankers"
@@ -169,6 +219,8 @@
     intel: "intel-diffusers"
     amd: "rocm-diffusers"
     nvidia-l4t: "nvidia-l4t-diffusers"
+    metal: "metal-diffusers"
+    default: "cpu-diffusers"
 - &exllama2
   name: "exllama2"
   urls:
@@ -218,6 +270,7 @@
     nvidia: "cuda12-kokoro"
     intel: "intel-kokoro"
     amd: "rocm-kokoro"
+    nvidia-l4t: "nvidia-l4t-kokoro"
 - &coqui
   urls:
     - https://github.com/idiap/coqui-ai-TTS
@@ -298,6 +351,9 @@
   alias: "chatterbox"
   capabilities:
     nvidia: "cuda12-chatterbox"
+    metal: "metal-chatterbox"
+    default: "cpu-chatterbox"
+    nvidia-l4t: "nvidia-l4t-arm64-chatterbox"
 - &piper
   name: "piper"
   uri: "quay.io/go-skynet/local-ai-backends:latest-piper"
@@ -371,6 +427,83 @@
     - text-to-speech
     - TTS
   license: apache-2.0
+- &neutts
+  name: "neutts"
+  urls:
+    - https://github.com/neuphonic/neutts-air
+  description: |
+    NeuTTS Air is the world’s first super-realistic, on-device, TTS speech language model with instant voice cloning. Built off a 0.5B LLM backbone, NeuTTS Air brings natural-sounding speech, real-time performance, built-in security and speaker cloning to your local device - unlocking a new category of embedded voice agents, assistants, toys, and compliance-safe apps.
+  tags:
+    - text-to-speech
+    - TTS
+  license: apache-2.0
+  capabilities:
+    default: "cpu-neutts"
+    nvidia: "cuda12-neutts"
+    amd: "rocm-neutts"
+    nvidia-l4t: "nvidia-l4t-neutts"
+- !!merge <<: *neutts
+  name: "neutts-development"
+  capabilities:
+    default: "cpu-neutts-development"
+    nvidia: "cuda12-neutts-development"
+    amd: "rocm-neutts-development"
+    nvidia-l4t: "nvidia-l4t-neutts-development"
+- !!merge <<: *neutts
+  name: "cpu-neutts"
+  uri: "quay.io/go-skynet/local-ai-backends:latest-cpu-neutts"
+  mirrors:
+    - localai/localai-backends:latest-cpu-neutts
+- !!merge <<: *neutts
+  name: "cuda12-neutts"
+  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-nvidia-cuda-12-neutts"
+  mirrors:
+    - localai/localai-backends:latest-gpu-nvidia-cuda-12-neutts
+- !!merge <<: *neutts
+  name: "rocm-neutts"
+  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-rocm-hipblas-neutts"
+  mirrors:
+    - localai/localai-backends:latest-gpu-rocm-hipblas-neutts
+- !!merge <<: *neutts
+  name: "nvidia-l4t-neutts"
+  uri: "quay.io/go-skynet/local-ai-backends:latest-nvidia-l4t-arm64-neutts"
+  mirrors:
+    - localai/localai-backends:latest-nvidia-l4t-arm64-neutts
+- !!merge <<: *neutts
+  name: "cpu-neutts-development"
+  uri: "quay.io/go-skynet/local-ai-backends:master-cpu-neutts"
+  mirrors:
+    - localai/localai-backends:master-cpu-neutts
+- !!merge <<: *neutts
+  name: "cuda12-neutts-development"
+  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-nvidia-cuda-12-neutts"
+  mirrors:
+    - localai/localai-backends:master-gpu-nvidia-cuda-12-neutts
+- !!merge <<: *neutts
+  name: "rocm-neutts-development"
+  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-rocm-hipblas-neutts"
+  mirrors:
+    - localai/localai-backends:master-gpu-rocm-hipblas-neutts
+- !!merge <<: *neutts
+  name: "nvidia-l4t-neutts-development"
+  uri: "quay.io/go-skynet/local-ai-backends:master-nvidia-l4t-arm64-neutts"
+  mirrors:
+    - localai/localai-backends:master-nvidia-l4t-arm64-neutts
+- !!merge <<: *mlx
+  name: "mlx-development"
+  uri: "quay.io/go-skynet/local-ai-backends:master-metal-darwin-arm64-mlx"
+  mirrors:
+    - localai/localai-backends:master-metal-darwin-arm64-mlx
+- !!merge <<: *mlx-vlm
+  name: "mlx-vlm-development"
+  uri: "quay.io/go-skynet/local-ai-backends:master-metal-darwin-arm64-mlx-vlm"
+  mirrors:
+    - localai/localai-backends:master-metal-darwin-arm64-mlx-vlm
+- !!merge <<: *mlx-audio
+  name: "mlx-audio-development"
+  uri: "quay.io/go-skynet/local-ai-backends:master-metal-darwin-arm64-mlx-audio"
+  mirrors:
+    - localai/localai-backends:master-metal-darwin-arm64-mlx-audio
 - !!merge <<: *kitten-tts
   name: "kitten-tts-development"
   uri: "quay.io/go-skynet/local-ai-backends:master-kitten-tts"
@@ -514,6 +647,16 @@
   mirrors:
     - localai/localai-backends:latest-cpu-whisper
 - !!merge <<: *whispercpp
+  name: "metal-whisper"
+  uri: "quay.io/go-skynet/local-ai-backends:latest-metal-darwin-arm64-whisper"
+  mirrors:
+    - localai/localai-backends:latest-metal-darwin-arm64-whisper
+- !!merge <<: *whispercpp
+  name: "metal-whisper-development"
+  uri: "quay.io/go-skynet/local-ai-backends:master-metal-darwin-arm64-whisper"
+  mirrors:
+    - localai/localai-backends:master-metal-darwin-arm64-whisper
+- !!merge <<: *whispercpp
   name: "cpu-whisper-development"
   uri: "quay.io/go-skynet/local-ai-backends:master-cpu-whisper"
   mirrors:
@@ -599,6 +742,16 @@
   uri: "quay.io/go-skynet/local-ai-backends:master-cpu-stablediffusion-ggml"
   mirrors:
     - localai/localai-backends:master-cpu-stablediffusion-ggml
+- !!merge <<: *stablediffusionggml
+  name: "metal-stablediffusion-ggml"
+  uri: "quay.io/go-skynet/local-ai-backends:latest-metal-darwin-arm64-stablediffusion-ggml"
+  mirrors:
+    - localai/localai-backends:latest-metal-darwin-arm64-stablediffusion-ggml
+- !!merge <<: *stablediffusionggml
+  name: "metal-stablediffusion-ggml-development"
+  uri: "quay.io/go-skynet/local-ai-backends:master-metal-darwin-arm64-stablediffusion-ggml"
+  mirrors:
+    - localai/localai-backends:master-metal-darwin-arm64-stablediffusion-ggml
 - !!merge <<: *stablediffusionggml
   name: "vulkan-stablediffusion-ggml"
   uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-vulkan-stablediffusion-ggml"
@@ -855,6 +1008,18 @@
     intel: "intel-diffusers-development"
     amd: "rocm-diffusers-development"
     nvidia-l4t: "nvidia-l4t-diffusers-development"
+    metal: "metal-diffusers-development"
+    default: "cpu-diffusers-development"
+- !!merge <<: *diffusers
+  name: "cpu-diffusers"
+  uri: "quay.io/go-skynet/local-ai-backends:latest-cpu-diffusers"
+  mirrors:
+    - localai/localai-backends:latest-cpu-diffusers
+- !!merge <<: *diffusers
+  name: "cpu-diffusers-development"
+  uri: "quay.io/go-skynet/local-ai-backends:master-cpu-diffusers"
+  mirrors:
+    - localai/localai-backends:master-cpu-diffusers
 - !!merge <<: *diffusers
   name: "nvidia-l4t-diffusers"
   uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-nvidia-l4t-diffusers"
@@ -905,6 +1070,16 @@
   uri: "quay.io/go-skynet/local-ai-backends:master-gpu-intel-diffusers"
   mirrors:
     - localai/localai-backends:master-gpu-intel-diffusers
+- !!merge <<: *diffusers
+  name: "metal-diffusers"
+  uri: "quay.io/go-skynet/local-ai-backends:latest-metal-darwin-arm64-diffusers"
+  mirrors:
+    - localai/localai-backends:latest-metal-darwin-arm64-diffusers
+- !!merge <<: *diffusers
+  name: "metal-diffusers-development"
+  uri: "quay.io/go-skynet/local-ai-backends:master-metal-darwin-arm64-diffusers"
+  mirrors:
+    - localai/localai-backends:master-metal-darwin-arm64-diffusers
   ## exllama2
 - !!merge <<: *exllama2
   name: "exllama2-development"
@@ -938,6 +1113,7 @@
     nvidia: "cuda12-kokoro-development"
     intel: "intel-kokoro-development"
     amd: "rocm-kokoro-development"
+    nvidia-l4t: "nvidia-l4t-kokoro-development"
 - !!merge <<: *kokoro
   name: "cuda11-kokoro-development"
   uri: "quay.io/go-skynet/local-ai-backends:master-gpu-nvidia-cuda-11-kokoro"
@@ -963,6 +1139,16 @@
   uri: "quay.io/go-skynet/local-ai-backends:master-gpu-intel-kokoro"
   mirrors:
     - localai/localai-backends:master-gpu-intel-kokoro
+- !!merge <<: *kokoro
+  name: "nvidia-l4t-kokoro"
+  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-nvidia-l4t-kokoro"
+  mirrors:
+    - localai/localai-backends:latest-gpu-nvidia-l4t-kokoro
+- !!merge <<: *kokoro
+  name: "nvidia-l4t-kokoro-development"
+  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-nvidia-l4t-kokoro"
+  mirrors:
+    - localai/localai-backends:master-gpu-nvidia-l4t-kokoro
 - !!merge <<: *kokoro
   name: "cuda11-kokoro"
   uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-nvidia-cuda-11-kokoro"
@@ -1114,6 +1300,39 @@
   name: "chatterbox-development"
   capabilities:
     nvidia: "cuda12-chatterbox-development"
+    metal: "metal-chatterbox-development"
+    default: "cpu-chatterbox-development"
+    nvidia-l4t: "nvidia-l4t-arm64-chatterbox"
+- !!merge <<: *chatterbox
+  name: "cpu-chatterbox"
+  uri: "quay.io/go-skynet/local-ai-backends:latest-cpu-chatterbox"
+  mirrors:
+    - localai/localai-backends:latest-cpu-chatterbox
+- !!merge <<: *chatterbox
+  name: "cpu-chatterbox-development"
+  uri: "quay.io/go-skynet/local-ai-backends:master-cpu-chatterbox"
+  mirrors:
+    - localai/localai-backends:master-cpu-chatterbox
+- !!merge <<: *chatterbox
+  name: "nvidia-l4t-arm64-chatterbox"
+  uri: "quay.io/go-skynet/local-ai-backends:latest-gpu-nvidia-l4t-arm64-chatterbox"
+  mirrors:
+    - localai/localai-backends:latest-gpu-nvidia-l4t-arm64-chatterbox
+- !!merge <<: *chatterbox
+  name: "nvidia-l4t-arm64-chatterbox-development"
+  uri: "quay.io/go-skynet/local-ai-backends:master-gpu-nvidia-l4t-arm64-chatterbox"
+  mirrors:
+    - localai/localai-backends:master-gpu-nvidia-l4t-arm64-chatterbox
+- !!merge <<: *chatterbox
+  name: "metal-chatterbox"
+  uri: "quay.io/go-skynet/local-ai-backends:latest-metal-darwin-arm64-chatterbox"
+  mirrors:
+    - localai/localai-backends:latest-metal-darwin-arm64-chatterbox
+- !!merge <<: *chatterbox
+  name: "metal-chatterbox-development"
+  uri: "quay.io/go-skynet/local-ai-backends:master-metal-darwin-arm64-chatterbox"
+  mirrors:
+    - localai/localai-backends:master-metal-darwin-arm64-chatterbox
 - !!merge <<: *chatterbox
   name: "cuda12-chatterbox-development"
   uri: "quay.io/go-skynet/local-ai-backends:master-gpu-nvidia-cuda-12-chatterbox"

@@ -13,6 +13,9 @@ import (
 	"github.com/mudler/LocalAI/core/config"
 	"github.com/mudler/LocalAI/core/http"
 	"github.com/mudler/LocalAI/core/p2p"
+	"github.com/mudler/LocalAI/internal"
+	"github.com/mudler/LocalAI/pkg/signals"
+	"github.com/mudler/LocalAI/pkg/system"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -22,6 +25,7 @@ type RunCMD struct {
 
 	ExternalBackends             []string      `env:"LOCALAI_EXTERNAL_BACKENDS,EXTERNAL_BACKENDS" help:"A list of external backends to load from gallery on boot" group:"backends"`
 	BackendsPath                 string        `env:"LOCALAI_BACKENDS_PATH,BACKENDS_PATH" type:"path" default:"${basepath}/backends" help:"Path containing backends used for inferencing" group:"backends"`
+	BackendsSystemPath           string        `env:"LOCALAI_BACKENDS_SYSTEM_PATH,BACKEND_SYSTEM_PATH" type:"path" default:"/usr/share/localai/backends" help:"Path containing system backends used for inferencing" group:"backends"`
 	ModelsPath                   string        `env:"LOCALAI_MODELS_PATH,MODELS_PATH" type:"path" default:"${basepath}/models" help:"Path containing models used for inferencing" group:"storage"`
 	GeneratedContentPath         string        `env:"LOCALAI_GENERATED_CONTENT_PATH,GENERATED_CONTENT_PATH" type:"path" default:"/tmp/generated/content" help:"Location for generated content (e.g. images, audio, videos)" group:"storage"`
 	UploadPath                   string        `env:"LOCALAI_UPLOAD_PATH,UPLOAD_PATH" type:"path" default:"/tmp/localai/upload" help:"Path to store uploads from files api" group:"storage"`
@@ -71,18 +75,33 @@ type RunCMD struct {
 	DisableGalleryEndpoint             bool     `env:"LOCALAI_DISABLE_GALLERY_ENDPOINT,DISABLE_GALLERY_ENDPOINT" help:"Disable the gallery endpoints" group:"api"`
 	MachineTag                         string   `env:"LOCALAI_MACHINE_TAG,MACHINE_TAG" help:"Add Machine-Tag header to each response which is useful to track the machine in the P2P network" group:"api"`
 	LoadToMemory                       []string `env:"LOCALAI_LOAD_TO_MEMORY,LOAD_TO_MEMORY" help:"A list of models to load into memory at startup" group:"models"`
+
+	Version bool
 }
 
 func (r *RunCMD) Run(ctx *cliContext.Context) error {
+	if r.Version {
+		fmt.Println(internal.Version)
+		return nil
+	}
+
 	os.MkdirAll(r.BackendsPath, 0750)
 	os.MkdirAll(r.ModelsPath, 0750)
+
+	systemState, err := system.GetSystemState(
+		system.WithBackendSystemPath(r.BackendsSystemPath),
+		system.WithModelPath(r.ModelsPath),
+		system.WithBackendPath(r.BackendsPath),
+	)
+	if err != nil {
+		return err
+	}
 
 	opts := []config.AppOption{
 		config.WithConfigFile(r.ModelsConfigFile),
 		config.WithJSONStringPreload(r.PreloadModels),
 		config.WithYAMLConfigPreload(r.PreloadModelsConfig),
-		config.WithModelPath(r.ModelsPath),
-		config.WithBackendsPath(r.BackendsPath),
+		config.WithSystemState(systemState),
 		config.WithContextSize(r.ContextSize),
 		config.WithDebug(zerolog.GlobalLevel() <= zerolog.DebugLevel),
 		config.WithGeneratedContentDir(r.GeneratedContentPath),
@@ -108,6 +127,7 @@ func (r *RunCMD) Run(ctx *cliContext.Context) error {
 		config.WithP2PNetworkID(r.Peer2PeerNetworkID),
 		config.WithLoadToMemory(r.LoadToMemory),
 		config.WithMachineTag(r.MachineTag),
+		config.WithAPIAddress(r.Address),
 	}
 
 	if r.DisableMetricsEndpoint {
@@ -133,10 +153,6 @@ func (r *RunCMD) Run(ctx *cliContext.Context) error {
 	}
 
 	backgroundCtx := context.Background()
-
-	if err := cli_api.StartP2PStack(backgroundCtx, r.Address, token, r.Peer2PeerNetworkID, r.Federated); err != nil {
-		return err
-	}
 
 	idleWatchDog := r.EnableWatchdogIdle
 	busyWatchDog := r.EnableWatchdogBusy
@@ -205,6 +221,16 @@ func (r *RunCMD) Run(ctx *cliContext.Context) error {
 		log.Error().Err(err).Msg("error during HTTP App construction")
 		return err
 	}
+
+	if err := cli_api.StartP2PStack(backgroundCtx, r.Address, token, r.Peer2PeerNetworkID, r.Federated, app); err != nil {
+		return err
+	}
+
+	signals.RegisterGracefulTerminationHandler(func() {
+		if err := app.ModelLoader().StopAllGRPC(); err != nil {
+			log.Error().Err(err).Msg("error while stopping all grpc backends")
+		}
+	})
 
 	return appHTTP.Listen(r.Address)
 }

@@ -1,7 +1,8 @@
 package schema
 
 import (
-	"github.com/mudler/LocalAI/core/p2p"
+	"time"
+
 	gopsutil "github.com/shirou/gopsutil/v3/process"
 )
 
@@ -27,6 +28,7 @@ type GalleryResponse struct {
 type VideoRequest struct {
 	BasicModelRequest
 	Prompt         string  `json:"prompt" yaml:"prompt"`
+	NegativePrompt string  `json:"negative_prompt" yaml:"negative_prompt"`
 	StartImage     string  `json:"start_image" yaml:"start_image"`
 	EndImage       string  `json:"end_image" yaml:"end_image"`
 	Width          int32   `json:"width" yaml:"width"`
@@ -35,6 +37,7 @@ type VideoRequest struct {
 	FPS            int32   `json:"fps" yaml:"fps"`
 	Seed           int32   `json:"seed" yaml:"seed"`
 	CFGScale       float32 `json:"cfg_scale" yaml:"cfg_scale"`
+	Step           int32   `json:"step" yaml:"step"`
 	ResponseFormat string  `json:"response_format" yaml:"response_format"`
 }
 
@@ -107,9 +110,23 @@ type StoresFindResponse struct {
 	Similarities []float32   `json:"similarities" yaml:"similarities"`
 }
 
+type NodeData struct {
+	Name          string
+	ID            string
+	TunnelAddress string
+	ServiceID     string
+	LastSeen      time.Time
+}
+
+func (d NodeData) IsOnline() bool {
+	now := time.Now()
+	// if the node was seen in the last 40 seconds, it's online
+	return now.Sub(d.LastSeen) < 40*time.Second
+}
+
 type P2PNodesResponse struct {
-	Nodes          []p2p.NodeData `json:"nodes" yaml:"nodes"`
-	FederatedNodes []p2p.NodeData `json:"federated_nodes" yaml:"federated_nodes"`
+	Nodes          []NodeData `json:"nodes" yaml:"nodes"`
+	FederatedNodes []NodeData `json:"federated_nodes" yaml:"federated_nodes"`
 }
 
 type SysInfoModel struct {

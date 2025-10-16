@@ -25,10 +25,28 @@ If you are exposing LocalAI remotely, make sure you protect the API endpoints ad
 curl https://localai.io/install.sh | sh
 ```
 
+The bash installer, if docker is not detected, will install automatically as a systemd service.
+
 See [Installer]({{% relref "docs/advanced/installer" %}}) for all the supported options
+
+### macOS Download
+
+<a href="https://github.com/mudler/LocalAI/releases/latest/download/LocalAI.dmg">
+  <img src="https://img.shields.io/badge/Download-macOS-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download LocalAI for macOS"/>
+</a>
 
 ### Run with docker
 
+{{% alert icon="💡" %}}
+**Docker Run vs Docker Start**
+
+- `docker run` creates and starts a new container. If a container with the same name already exists, this command will fail.
+- `docker start` starts an existing container that was previously created with `docker run`.
+
+If you've already run LocalAI before and want to start it again, use: `docker start -i local-ai`
+{{% /alert %}}
+
+The following commands will automatically start with a web interface and a Rest API on port `8080`.
 
 #### CPU only image:
 
@@ -87,7 +105,9 @@ docker run -ti --name local-ai -p 8080:8080 localai/localai:latest-aio-gpu-intel
 docker run -ti --name local-ai -p 8080:8080 --device=/dev/kfd --device=/dev/dri --group-add=video localai/localai:latest-aio-gpu-hipblas
 ```
 
-### Load models:
+### Downloading models on start
+
+When starting LocalAI (either via Docker or via CLI) you can specify as argument a list of models to install automatically before starting the API, for example:
 
 ```bash
 # From the model gallery (see available models with `local-ai models list`, in the WebUI from the model tab, or visiting https://models.localai.io)
@@ -106,7 +126,7 @@ local-ai run oci://localai/phi-2:latest
 **Automatic Backend Detection**: When you install models from the gallery or YAML files, LocalAI automatically detects your system's GPU capabilities (NVIDIA, AMD, Intel) and downloads the appropriate backend. For advanced configuration options, see [GPU Acceleration]({{% relref "docs/features/gpu-acceleration#automatic-backend-detection" %}}).
 {{% /alert %}}
 
-For a full list of options, refer to the [Installer Options]({{% relref "docs/advanced/installer" %}}) documentation.
+For a full list of options, you can run LocalAI with `--help` or refer to the [Installer Options]({{% relref "docs/advanced/installer" %}}) documentation.
 
 Binaries can also be [manually downloaded]({{% relref "docs/reference/binaries" %}}).
 
@@ -176,7 +196,7 @@ MODEL_NAME=gemma-3-12b-it docker compose up
 
 # NVIDIA GPU setup with custom multimodal and image models
 MODEL_NAME=gemma-3-12b-it \
-MULTIMODAL_MODEL=minicpm-v-2_6 \
+MULTIMODAL_MODEL=minicpm-v-4_5 \
 IMAGE_MODEL=flux.1-dev-ggml \
 docker compose -f docker-compose.nvidia.yaml up
 ```

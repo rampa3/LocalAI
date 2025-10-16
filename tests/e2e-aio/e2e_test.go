@@ -169,6 +169,30 @@ var _ = Describe("E2E test", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(len(resp.Data)).To(Equal(1), fmt.Sprint(resp))
 				Expect(resp.Data[0].Embedding).ToNot(BeEmpty())
+
+				resp2, err := client.CreateEmbeddings(context.TODO(),
+					openai.EmbeddingRequestStrings{
+						Input: []string{"cat"},
+						Model: openai.AdaEmbeddingV2,
+					},
+				)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(len(resp2.Data)).To(Equal(1), fmt.Sprint(resp))
+				Expect(resp2.Data[0].Embedding).ToNot(BeEmpty())
+				Expect(resp2.Data[0].Embedding).ToNot(Equal(resp.Data[0].Embedding))
+
+				resp3, err := client.CreateEmbeddings(context.TODO(),
+					openai.EmbeddingRequestStrings{
+						Input: []string{"doc", "cat"},
+						Model: openai.AdaEmbeddingV2,
+					},
+				)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(len(resp3.Data)).To(Equal(2), fmt.Sprint(resp))
+				Expect(resp3.Data[0].Embedding).ToNot(BeEmpty())
+				Expect(resp3.Data[0].Embedding).To(Equal(resp.Data[0].Embedding))
+				Expect(resp3.Data[1].Embedding).To(Equal(resp2.Data[0].Embedding))
+				Expect(resp3.Data[0].Embedding).ToNot(Equal(resp3.Data[1].Embedding))
 			})
 		})
 		Context("vision", func() {
@@ -188,7 +212,7 @@ var _ = Describe("E2E test", func() {
 									{
 										Type: openai.ChatMessagePartTypeImageURL,
 										ImageURL: &openai.ChatMessageImageURL{
-											URL:    "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg",
+											URL:    "https://picsum.photos/id/22/4434/3729",
 											Detail: openai.ImageURLDetailLow,
 										},
 									},
@@ -197,7 +221,7 @@ var _ = Describe("E2E test", func() {
 						}})
 				Expect(err).ToNot(HaveOccurred())
 				Expect(len(resp.Choices)).To(Equal(1), fmt.Sprint(resp))
-				Expect(resp.Choices[0].Message.Content).To(Or(ContainSubstring("wooden"), ContainSubstring("grass")), fmt.Sprint(resp.Choices[0].Message.Content))
+				Expect(resp.Choices[0].Message.Content).To(Or(ContainSubstring("man"), ContainSubstring("road")), fmt.Sprint(resp.Choices[0].Message.Content))
 			})
 		})
 		Context("text to audio", func() {

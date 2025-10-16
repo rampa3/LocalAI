@@ -27,11 +27,11 @@ import (
 // @Param request body schema.OpenAIRequest true "query params"
 // @Success 200 {object} schema.OpenAIResponse "Response"
 // @Router /v1/chat/completions [post]
-func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluator *templates.Evaluator, startupOptions *config.ApplicationConfig) func(c *fiber.Ctx) error {
+func ChatEndpoint(cl *config.ModelConfigLoader, ml *model.ModelLoader, evaluator *templates.Evaluator, startupOptions *config.ApplicationConfig) func(c *fiber.Ctx) error {
 	var id, textContentToReturn string
 	var created int
 
-	process := func(s string, req *schema.OpenAIRequest, config *config.BackendConfig, loader *model.ModelLoader, responses chan schema.OpenAIResponse, extraUsage bool) {
+	process := func(s string, req *schema.OpenAIRequest, config *config.ModelConfig, loader *model.ModelLoader, responses chan schema.OpenAIResponse, extraUsage bool) error {
 		initialMessage := schema.OpenAIResponse{
 			ID:      id,
 			Created: created,
@@ -41,7 +41,7 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
 		}
 		responses <- initialMessage
 
-		ComputeChoices(req, s, config, cl, startupOptions, loader, func(s string, c *[]schema.Choice) {}, func(s string, tokenUsage backend.TokenUsage) bool {
+		_, _, err := ComputeChoices(req, s, config, cl, startupOptions, loader, func(s string, c *[]schema.Choice) {}, func(s string, tokenUsage backend.TokenUsage) bool {
 			usage := schema.OpenAIUsage{
 				PromptTokens:     tokenUsage.Prompt,
 				CompletionTokens: tokenUsage.Completion,
@@ -65,16 +65,19 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
 			return true
 		})
 		close(responses)
+		return err
 	}
-	processTools := func(noAction string, prompt string, req *schema.OpenAIRequest, config *config.BackendConfig, loader *model.ModelLoader, responses chan schema.OpenAIResponse, extraUsage bool) {
+	processTools := func(noAction string, prompt string, req *schema.OpenAIRequest, config *config.ModelConfig, loader *model.ModelLoader, responses chan schema.OpenAIResponse, extraUsage bool) error {
 		result := ""
-		_, tokenUsage, _ := ComputeChoices(req, prompt, config, cl, startupOptions, loader, func(s string, c *[]schema.Choice) {}, func(s string, usage backend.TokenUsage) bool {
+		_, tokenUsage, err := ComputeChoices(req, prompt, config, cl, startupOptions, loader, func(s string, c *[]schema.Choice) {}, func(s string, usage backend.TokenUsage) bool {
 			result += s
 			// TODO: Change generated BNF grammar to be compliant with the schema so we can
 			// stream the result token by token here.
 			return true
 		})
-
+		if err != nil {
+			return err
+		}
 		textContentToReturn = functions.ParseTextContent(result, config.FunctionsConfig)
 		result = functions.CleanupLLMResult(result, config.FunctionsConfig)
 		functionResults := functions.ParseFunctionCall(result, config.FunctionsConfig)
@@ -95,7 +98,7 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
 			result, err := handleQuestion(config, cl, req, ml, startupOptions, functionResults, result, prompt)
 			if err != nil {
 				log.Error().Err(err).Msg("error handling question")
-				return
+				return err
 			}
 			usage := schema.OpenAIUsage{
 				PromptTokens:     tokenUsage.Prompt,
@@ -169,6 +172,7 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
 		}
 
 		close(responses)
+		return err
 	}
 
 	return func(c *fiber.Ctx) error {
@@ -183,7 +187,7 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
 
 		extraUsage := c.Get("Extra-Usage", "") != ""
 
-		config, ok := c.Locals(middleware.CONTEXT_LOCALS_KEY_MODEL_CONFIG).(*config.BackendConfig)
+		config, ok := c.Locals(middleware.CONTEXT_LOCALS_KEY_MODEL_CONFIG).(*config.ModelConfig)
 		if !ok || config == nil {
 			return fiber.ErrBadRequest
 		}
@@ -223,9 +227,11 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
 			if err != nil {
 				return err
 			}
-			if d.Type == "json_object" {
+
+			switch d.Type {
+			case "json_object":
 				input.Grammar = functions.JSONBNF
-			} else if d.Type == "json_schema" {
+			case "json_schema":
 				d := schema.JsonSchemaRequest{}
 				dat, err := json.Marshal(config.ResponseFormatMap)
 				if err != nil {
@@ -241,6 +247,8 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
 				g, err := fs.Grammar(config.FunctionsConfig.GrammarOptions()...)
 				if err == nil {
 					input.Grammar = g
+				} else {
+					log.Error().Err(err).Msg("Failed generating grammar")
 				}
 			}
 		}
@@ -266,7 +274,7 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
 			}
 
 			// Append the no action function
-			if !config.FunctionsConfig.DisableNoAction {
+			if !config.FunctionsConfig.DisableNoAction && !strictMode {
 				funcs = append(funcs, noActionGrammar)
 			}
 
@@ -280,11 +288,15 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
 			g, err := jsStruct.Grammar(config.FunctionsConfig.GrammarOptions()...)
 			if err == nil {
 				config.Grammar = g
+			} else {
+				log.Error().Err(err).Msg("Failed generating grammar")
 			}
 		case input.JSONFunctionGrammarObject != nil:
 			g, err := input.JSONFunctionGrammarObject.Grammar(config.FunctionsConfig.GrammarOptions()...)
 			if err == nil {
 				config.Grammar = g
+			} else {
+				log.Error().Err(err).Msg("Failed generating grammar")
 			}
 		default:
 			// Force picking one of the functions by the request
@@ -326,37 +338,75 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
 			c.Set("X-Correlation-ID", id)
 
 			responses := make(chan schema.OpenAIResponse)
+			ended := make(chan error, 1)
 
-			if !shouldUseFn {
-				go process(predInput, input, config, ml, responses, extraUsage)
-			} else {
-				go processTools(noActionName, predInput, input, config, ml, responses, extraUsage)
-			}
+			go func() {
+				if !shouldUseFn {
+					ended <- process(predInput, input, config, ml, responses, extraUsage)
+				} else {
+					ended <- processTools(noActionName, predInput, input, config, ml, responses, extraUsage)
+				}
+			}()
 
 			c.Context().SetBodyStreamWriter(fasthttp.StreamWriter(func(w *bufio.Writer) {
 				usage := &schema.OpenAIUsage{}
 				toolsCalled := false
-				for ev := range responses {
-					usage = &ev.Usage // Copy a pointer to the latest usage chunk so that the stop message can reference it
-					if len(ev.Choices[0].Delta.ToolCalls) > 0 {
-						toolsCalled = true
+
+			LOOP:
+				for {
+					select {
+					case ev := <-responses:
+						if len(ev.Choices) == 0 {
+							log.Debug().Msgf("No choices in the response, skipping")
+							continue
+						}
+						usage = &ev.Usage // Copy a pointer to the latest usage chunk so that the stop message can reference it
+						if len(ev.Choices[0].Delta.ToolCalls) > 0 {
+							toolsCalled = true
+						}
+						var buf bytes.Buffer
+						enc := json.NewEncoder(&buf)
+						enc.Encode(ev)
+						log.Debug().Msgf("Sending chunk: %s", buf.String())
+						_, err := fmt.Fprintf(w, "data: %v\n", buf.String())
+						if err != nil {
+							log.Debug().Msgf("Sending chunk failed: %v", err)
+							input.Cancel()
+						}
+						w.Flush()
+					case err := <-ended:
+						if err == nil {
+							break LOOP
+						}
+						log.Error().Msgf("Stream ended with error: %v", err)
+
+						resp := &schema.OpenAIResponse{
+							ID:      id,
+							Created: created,
+							Model:   input.Model, // we have to return what the user sent here, due to OpenAI spec.
+							Choices: []schema.Choice{
+								{
+									FinishReason: "stop",
+									Index:        0,
+									Delta:        &schema.Message{Content: "Internal error: " + err.Error()},
+								}},
+							Object: "chat.completion.chunk",
+							Usage:  *usage,
+						}
+						respData, _ := json.Marshal(resp)
+
+						w.WriteString(fmt.Sprintf("data: %s\n\n", respData))
+						w.WriteString("data: [DONE]\n\n")
+						w.Flush()
+
+						return
 					}
-					var buf bytes.Buffer
-					enc := json.NewEncoder(&buf)
-					enc.Encode(ev)
-					log.Debug().Msgf("Sending chunk: %s", buf.String())
-					_, err := fmt.Fprintf(w, "data: %v\n", buf.String())
-					if err != nil {
-						log.Debug().Msgf("Sending chunk failed: %v", err)
-						input.Cancel()
-					}
-					w.Flush()
 				}
 
 				finishReason := "stop"
-				if toolsCalled {
+				if toolsCalled && len(input.Tools) > 0 {
 					finishReason = "tool_calls"
-				} else if toolsCalled && len(input.Tools) == 0 {
+				} else if toolsCalled {
 					finishReason = "function_call"
 				}
 
@@ -378,7 +428,9 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
 				w.WriteString(fmt.Sprintf("data: %s\n\n", respData))
 				w.WriteString("data: [DONE]\n\n")
 				w.Flush()
+				log.Debug().Msgf("Stream ended")
 			}))
+
 			return nil
 
 		// no streaming mode
@@ -397,11 +449,6 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
 				log.Debug().Msgf("Text content to return: %s", textContentToReturn)
 				noActionsToRun := len(results) > 0 && results[0].Name == noActionName || len(results) == 0
 
-				finishReason := "stop"
-				if len(input.Tools) > 0 {
-					finishReason = "tool_calls"
-				}
-
 				switch {
 				case noActionsToRun:
 					result, err := handleQuestion(config, cl, input, ml, startupOptions, results, s, predInput)
@@ -411,11 +458,11 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
 					}
 
 					*c = append(*c, schema.Choice{
-						FinishReason: finishReason,
+						FinishReason: "stop",
 						Message:      &schema.Message{Role: "assistant", Content: &result}})
 				default:
 					toolChoice := schema.Choice{
-						FinishReason: finishReason,
+						FinishReason: "tool_calls",
 						Message: &schema.Message{
 							Role: "assistant",
 						},
@@ -501,7 +548,7 @@ func ChatEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, evaluat
 	}
 }
 
-func handleQuestion(config *config.BackendConfig, cl *config.BackendConfigLoader, input *schema.OpenAIRequest, ml *model.ModelLoader, o *config.ApplicationConfig, funcResults []functions.FuncCallResults, result, prompt string) (string, error) {
+func handleQuestion(config *config.ModelConfig, cl *config.ModelConfigLoader, input *schema.OpenAIRequest, ml *model.ModelLoader, o *config.ApplicationConfig, funcResults []functions.FuncCallResults, result, prompt string) (string, error) {
 
 	if len(funcResults) == 0 && result != "" {
 		log.Debug().Msgf("nothing function results but we had a message from the LLM")

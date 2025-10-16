@@ -31,6 +31,7 @@ import (
 const (
 	localSampleRate  = 16000
 	remoteSampleRate = 24000
+	vadModel         = "silero-vad-ggml"
 )
 
 // A model can be "emulated" that is: transcribe audio to text -> feed text to the LLM -> generate audio as result
@@ -233,13 +234,13 @@ func registerRealtime(application *application.Application) func(c *websocket.Co
 		// TODO: The API has no way to configure the VAD model or other models that make up a pipeline to fake any-to-any
 		//       So possibly we could have a way to configure a composite model that can be used in situations where any-to-any is expected
 		pipeline := config.Pipeline{
-			VAD:           "silero-vad",
+			VAD:           vadModel,
 			Transcription: session.InputAudioTranscription.Model,
 		}
 
 		m, cfg, err := newTranscriptionOnlyModel(
 			&pipeline,
-			application.BackendLoader(),
+			application.ModelConfigLoader(),
 			application.ModelLoader(),
 			application.ApplicationConfig(),
 		)
@@ -255,20 +256,12 @@ func registerRealtime(application *application.Application) func(c *websocket.Co
 		sessions[sessionID] = session
 		sessionLock.Unlock()
 
-		// Send session.created and conversation.created events to the client
-		sendEvent(c, types.SessionCreatedEvent{
+		sendEvent(c, types.TranscriptionSessionCreatedEvent{
 			ServerEventBase: types.ServerEventBase{
 				EventID: "event_TODO",
-				Type:    types.ServerEventTypeSessionCreated,
+				Type:    types.ServerEventTypeTranscriptionSessionCreated,
 			},
 			Session: session.ToServer(),
-		})
-		sendEvent(c, types.ConversationCreatedEvent{
-			ServerEventBase: types.ServerEventBase{
-				EventID: "event_TODO",
-				Type:    types.ServerEventTypeConversationCreated,
-			},
-			Conversation: conversation.ToServer(),
 		})
 
 		var (
@@ -313,7 +306,7 @@ func registerRealtime(application *application.Application) func(c *websocket.Co
 				if err := updateTransSession(
 					session,
 					&sessionUpdate,
-					application.BackendLoader(),
+					application.ModelConfigLoader(),
 					application.ModelLoader(),
 					application.ApplicationConfig(),
 				); err != nil {
@@ -342,7 +335,7 @@ func registerRealtime(application *application.Application) func(c *websocket.Co
 				if err := updateSession(
 					session,
 					&sessionUpdate,
-					application.BackendLoader(),
+					application.ModelConfigLoader(),
 					application.ModelLoader(),
 					application.ApplicationConfig(),
 				); err != nil {
@@ -559,7 +552,7 @@ func sendNotImplemented(c *websocket.Conn, message string) {
 	sendError(c, "not_implemented", message, "", "event_TODO")
 }
 
-func updateTransSession(session *Session, update *types.ClientSession, cl *config.BackendConfigLoader, ml *model.ModelLoader, appConfig *config.ApplicationConfig) error {
+func updateTransSession(session *Session, update *types.ClientSession, cl *config.ModelConfigLoader, ml *model.ModelLoader, appConfig *config.ApplicationConfig) error {
 	sessionLock.Lock()
 	defer sessionLock.Unlock()
 
@@ -568,7 +561,7 @@ func updateTransSession(session *Session, update *types.ClientSession, cl *confi
 
 	if trUpd != nil && trUpd.Model != "" && trUpd.Model != trCur.Model {
 		pipeline := config.Pipeline{
-			VAD:           "silero-vad",
+			VAD:           vadModel,
 			Transcription: trUpd.Model,
 		}
 
@@ -589,7 +582,7 @@ func updateTransSession(session *Session, update *types.ClientSession, cl *confi
 }
 
 // Function to update session configurations
-func updateSession(session *Session, update *types.ClientSession, cl *config.BackendConfigLoader, ml *model.ModelLoader, appConfig *config.ApplicationConfig) error {
+func updateSession(session *Session, update *types.ClientSession, cl *config.ModelConfigLoader, ml *model.ModelLoader, appConfig *config.ApplicationConfig) error {
 	sessionLock.Lock()
 	defer sessionLock.Unlock()
 
@@ -628,7 +621,7 @@ func updateSession(session *Session, update *types.ClientSession, cl *config.Bac
 
 // handleVAD is a goroutine that listens for audio data from the client,
 // runs VAD on the audio data, and commits utterances to the conversation
-func handleVAD(cfg *config.BackendConfig, evaluator *templates.Evaluator, session *Session, conv *Conversation, c *websocket.Conn, done chan struct{}) {
+func handleVAD(cfg *config.ModelConfig, evaluator *templates.Evaluator, session *Session, conv *Conversation, c *websocket.Conn, done chan struct{}) {
 	vadContext, cancel := context.WithCancel(context.Background())
 	go func() {
 		<-done
@@ -742,7 +735,7 @@ func handleVAD(cfg *config.BackendConfig, evaluator *templates.Evaluator, sessio
 	}
 }
 
-func commitUtterance(ctx context.Context, utt []byte, cfg *config.BackendConfig, evaluator *templates.Evaluator, session *Session, conv *Conversation, c *websocket.Conn) {
+func commitUtterance(ctx context.Context, utt []byte, cfg *config.ModelConfig, evaluator *templates.Evaluator, session *Session, conv *Conversation, c *websocket.Conn) {
 	if len(utt) == 0 {
 		return
 	}
@@ -853,7 +846,7 @@ func runVAD(ctx context.Context, session *Session, adata []int16) ([]*proto.VADS
 
 // TODO: Below needed for normal mode instead of transcription only
 // Function to generate a response based on the conversation
-// func generateResponse(config *config.BackendConfig, evaluator *templates.Evaluator, session *Session, conversation *Conversation, responseCreate ResponseCreate, c *websocket.Conn, mt int) {
+// func generateResponse(config *config.ModelConfig, evaluator *templates.Evaluator, session *Session, conversation *Conversation, responseCreate ResponseCreate, c *websocket.Conn, mt int) {
 //
 // 	log.Debug().Msg("Generating realtime response...")
 //
@@ -1067,7 +1060,7 @@ func runVAD(ctx context.Context, session *Session, adata []int16) ([]*proto.VADS
 // }
 
 // Function to process text response and detect function calls
-func processTextResponse(config *config.BackendConfig, session *Session, prompt string) (string, *FunctionCall, error) {
+func processTextResponse(config *config.ModelConfig, session *Session, prompt string) (string, *FunctionCall, error) {
 
 	// Placeholder implementation
 	// Replace this with actual model inference logic using session.Model and prompt

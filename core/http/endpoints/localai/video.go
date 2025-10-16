@@ -61,10 +61,10 @@ func downloadFile(url string) (string, error) {
 */
 // VideoEndpoint
 // @Summary Creates a video given a prompt.
-// @Param request body schema.OpenAIRequest true "query params"
+// @Param request body schema.VideoRequest true "query params"
 // @Success 200 {object} schema.OpenAIResponse "Response"
 // @Router /video [post]
-func VideoEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, appConfig *config.ApplicationConfig) func(c *fiber.Ctx) error {
+func VideoEndpoint(cl *config.ModelConfigLoader, ml *model.ModelLoader, appConfig *config.ApplicationConfig) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
 		input, ok := c.Locals(middleware.CONTEXT_LOCALS_KEY_LOCALAI_REQUEST).(*schema.VideoRequest)
 		if !ok || input.Model == "" {
@@ -72,7 +72,7 @@ func VideoEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, appCon
 			return fiber.ErrBadRequest
 		}
 
-		config, ok := c.Locals(middleware.CONTEXT_LOCALS_KEY_MODEL_CONFIG).(*config.BackendConfig)
+		config, ok := c.Locals(middleware.CONTEXT_LOCALS_KEY_MODEL_CONFIG).(*config.ModelConfig)
 		if !ok || config == nil {
 			log.Error().Msg("Video Endpoint - Invalid Config")
 			return fiber.ErrBadRequest
@@ -166,7 +166,23 @@ func VideoEndpoint(cl *config.BackendConfigLoader, ml *model.ModelLoader, appCon
 
 		baseURL := c.BaseURL()
 
-		fn, err := backend.VideoGeneration(height, width, input.Prompt, src, input.EndImage, output, ml, *config, appConfig)
+		fn, err := backend.VideoGeneration(
+			height,
+			width,
+			input.Prompt,
+			input.NegativePrompt,
+			src,
+			input.EndImage,
+			output,
+			input.NumFrames,
+			input.FPS,
+			input.Seed,
+			input.CFGScale,
+			input.Step,
+			ml,
+			*config,
+			appConfig,
+		)
 		if err != nil {
 			return err
 		}

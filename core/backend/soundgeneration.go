@@ -21,10 +21,10 @@ func SoundGeneration(
 	sourceDivisor *int32,
 	loader *model.ModelLoader,
 	appConfig *config.ApplicationConfig,
-	backendConfig config.BackendConfig,
+	modelConfig config.ModelConfig,
 ) (string, *proto.Result, error) {
 
-	opts := ModelOptions(backendConfig, appConfig)
+	opts := ModelOptions(modelConfig, appConfig)
 	soundGenModel, err := loader.Load(opts...)
 	if err != nil {
 		return "", nil, err
@@ -49,7 +49,7 @@ func SoundGeneration(
 
 	res, err := soundGenModel.SoundGeneration(context.Background(), &proto.SoundGenerationRequest{
 		Text:        text,
-		Model:       backendConfig.Model,
+		Model:       modelConfig.Model,
 		Dst:         filePath,
 		Sample:      doSample,
 		Duration:    duration,
@@ -60,7 +60,7 @@ func SoundGeneration(
 
 	// return RPC error if any
 	if !res.Success {
-		return "", nil, fmt.Errorf(res.Message)
+		return "", nil, fmt.Errorf("error during sound generation: %s", res.Message)
 	}
 
 	return filePath, res, err
